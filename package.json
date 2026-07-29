@@ -3,7 +3,6 @@
     "version": "0.1.20",
     "private": true,
     "dependencies": {
-        "-": "0.0.1",
         "@babel/core": "^7.26.0",
         "@emotion/react": "^11.14.0",
         "@emotion/styled": "^11.14.0",
