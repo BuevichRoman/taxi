@@ -17,6 +17,9 @@ import images from '../../constants/images'
 import { useForm } from 'react-hook-form'
 import './styles.scss'
 import ChatToggler from '../../components/Chat/Toggler'
+import Breaks from '../../components/order/Breaks'
+import BreakConfirmModal from '../../components/order/Breaks/ConfirmModal'
+import { tBreak } from '../../components/order/Breaks/texts'
 import { orderSelectors, orderActionCreators } from '../../state/order'
 import { modalsActionCreators } from '../../state/modals'
 import { userSelectors } from '../../state/user'
@@ -71,6 +74,8 @@ const Order: React.FC<IProps> = ({
 }) => {
   const [isFromAddressShort, setIsFromAddressShort] = useState(true)
   const [isToAddressShort, setIsToAddressShort] = useState(true)
+  /** Какое подтверждение перерыва открыто: начало, окончание или ничего */
+  const [breakConfirm, setBreakConfirm] = useState<'start' | 'end' | null>(null)
 
   const id = useParams().id as string
   const navigate = useNavigate()
@@ -162,6 +167,27 @@ const Order: React.FC<IProps> = ({
           isOpen: true, 
           status: EStatuses.Fail, 
           message: t(TRANSLATION.ERROR) 
+        })
+      })
+  }
+
+  /**
+   * Начало и окончание перерыва. Заказ остаётся выполняющимся, меняется
+   * только внутренний режим (ТЗ п. 7). Проверки допустимости выполняет
+   * сервер, поэтому его отказ показываем как есть
+   */
+  const onBreakConfirmed = () => {
+    const isStart = breakConfirm === 'start'
+    setBreakConfirm(null)
+
+    API.setBreakState(id, isStart)
+      .then(() => getOrder(id))
+      .catch((error: { message?: string }) => {
+        console.error(error)
+        setMessageModal({
+          isOpen: true,
+          status: EStatuses.Fail,
+          message: error?.message || t(TRANSLATION.ERROR),
         })
       })
   }
@@ -269,6 +295,22 @@ const Order: React.FC<IProps> = ({
       />
     </>
     if (driver?.c_state === EBookingDriverState.Started) return <>
+      {order.b_execution?.mode === 'break' ?
+        <Button
+          text={tBreak(TRANSLATION.BREAK_END)}
+          className="order_take-order-btn"
+          onClick={() => setBreakConfirm('end')}
+          label={message}
+          status={status}
+        /> :
+        <Button
+          text={tBreak(TRANSLATION.BREAK_START)}
+          className="order_break-btn"
+          onClick={() => setBreakConfirm('start')}
+          label={message}
+          status={status}
+        />
+      }
       <Button
         text={t(TRANSLATION.CLOSE_DRIVE)}
         className="order_take-order-btn"
@@ -303,6 +345,16 @@ const Order: React.FC<IProps> = ({
         (
           <form onSubmit={formHandleSubmit(handleSubmit)}>
             <ClientInfo order={order} client={client} user={user}/>
+            <Breaks order={order}/>
+            <BreakConfirmModal
+              isOpen={breakConfirm !== null}
+              text={tBreak(breakConfirm === 'end' ?
+                TRANSLATION.BREAK_END_CONFIRM :
+                TRANSLATION.BREAK_START_CONFIRM)}
+              status={status}
+              onConfirm={onBreakConfirmed}
+              onCancel={() => setBreakConfirm(null)}
+            />
             <div className="order__from-to colored">
               <div className='estimate-time'>
                 {t(TRANSLATION.ESTIMATE_TIME)}:&nbsp;
