@@ -64,6 +64,7 @@ export {
   setOrderState,
   setOrderRating,
   setWaitingTime,
+  setBreakState,
 } from './order'
 export {
   getAreasIdsBetweenPoints,

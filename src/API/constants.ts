@@ -4,6 +4,8 @@ export enum EBookingActions {
   SetPerformer = 'set_performer',
   SetArriveState = 'set_arrive_state',
   SetStartState = 'set_start_state',
+  SetBreakStartState = 'set_break_start_state',
+  SetBreakEndState = 'set_break_end_state',
   SetCompleteState = 'set_complete_state',
   SetCancelState = 'set_cancel_state',
   SetRate = 'set_rate',

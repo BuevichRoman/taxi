@@ -194,7 +194,16 @@ const _getOrder = (
 ): Promise<IOrder | null> => {
   return axios.post(`${Config.API_URL}/drive/get/${id}?fields=00000000u1`, formData)
     .then(res => res.data.data)
-    .then(res => (res.booking && res.booking[id] && convertOrder(res.booking[id])) || null)
+    .then(res => {
+      const raw = res.booking && res.booking[id]
+      if (!raw) return null
+
+      const order = convertOrder(raw)
+      // Отметка серверного времени нужна для таймеров перерывов: часы
+      // устройства использовать нельзя (ТЗ п. 4)
+      order.server_time = res.server_time ?? raw.server_time
+      return order
+    })
 }
 export const getOrder = apiMethod<typeof _getOrder>(_getOrder)
 
@@ -346,3 +355,25 @@ const _setWaitingTime = (
  * @param previous actual waiting time
  */
 export const setWaitingTime = apiMethod<typeof _setWaitingTime>(_setWaitingTime)
+
+const _setBreakState = (
+  { formData }: IApiMethodArguments,
+  id: IOrder['b_id'],
+  isBreak: boolean,
+) => {
+  addToFormData(formData, {
+    action: isBreak ?
+      EBookingActions.SetBreakStartState :
+      EBookingActions.SetBreakEndState,
+  })
+
+  return axios.post(`${Config.API_URL}/drive/get/${id}`, formData)
+    .then(res => res.data)
+    .then(res => res.status === 'error' ? Promise.reject(res) : res)
+}
+/**
+ * Starts or ends a break within an active order.
+ * Order stays in progress, paid time is not accrued while on break.
+ * @param isBreak true to start a break, false to resume work
+ */
+export const setBreakState = apiMethod<typeof _setBreakState>(_setBreakState)

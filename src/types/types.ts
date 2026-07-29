@@ -255,6 +255,58 @@ export interface IOrderEstimation {
   profitRank?: EOrderProfitRank,
 }
 
+/** Плановый перерыв, заданный при создании заказа */
+export interface IPlannedBreak {
+  started: string
+  ended: string
+}
+
+/** Фактический перерыв. У активного перерыва ended равен null */
+export interface IActualBreak {
+  id: string
+  started: string
+  ended: string | null
+  /**
+   * Показывать ли перерыв в списках и в истории.
+   * Сервер скрывает слишком короткие интервалы, но всё равно учитывает их
+   * в суммах и в расчёте стоимости
+   */
+  display: boolean
+}
+
+interface IExecutionTotals {
+  /** Общее время: от начала до окончания либо до server_time */
+  total_seconds: number
+  /** Рабочее время: общее время за вычетом перерывов */
+  work_seconds: number
+  /** Суммарная длительность всех перерывов, включая скрытые */
+  break_seconds: number
+  /** Оплачиваемое время после округления на сервере. Из него считается цена */
+  billable_work_seconds: number
+}
+
+/**
+ * Плановые и фактические показатели выполнения заказа.
+ * Все величины рассчитываются сервером, клиент их не пересчитывает
+ */
+export interface IOrderExecution {
+  schema_version: number
+  /** Текущий режим. null до начала работы и после завершения заказа */
+  mode: 'work' | 'break' | null
+  /** Плановая смета. После начала заказа не изменяется */
+  estimate: (IExecutionTotals & {
+    started: string
+    ended: string
+    breaks: IPlannedBreak[]
+  }) | null
+  /** Фактические показатели */
+  actual: IExecutionTotals & {
+    started: string | null
+    ended: string | null
+    breaks: IActualBreak[]
+  }
+}
+
 export interface IOrder
   extends IBookingCoordinates, IBookingAddresses, IOrderEstimation {
   /** Идентификатор поездки */
@@ -345,6 +397,20 @@ export interface IOrder
       created: Moment
     }
   }
+  /**
+   * Перерывы и показатели времени по плану и по факту.
+   * Отсутствует у заказов, начатых до включения функционала
+   */
+  b_execution?: IOrderExecution
+  /**
+   * Время сервера на момент ответа. По нему считаются таймеры перерывов,
+   * чтобы не зависеть от часов устройства (ТЗ п. 4)
+   */
+  server_time?: string
+  /** Предварительная стоимость по плановой смете */
+  b_price_preliminary?: string
+  /** Итоговая стоимость по факту */
+  b_price_final?: string
   b_attempts?: Array<{
     /** Идентификатор водителя */
     u_id: string,
