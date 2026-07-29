@@ -80,7 +80,10 @@ class Config {
   }
 
   get SERVER_URL() {
-    return `https://ibronevik.ru/taxi/c/${_configName || DEFAULT_CONFIG_NAME}`
+    // Позволяет направить приложение на локальный или тестовый сервер.
+    // Без переменной поведение прежнее — боевой хост
+    return process.env.REACT_APP_SERVER_URL ||
+      `https://ibronevik.ru/taxi/c/${_configName || DEFAULT_CONFIG_NAME}`
   }
 
   get SavedConfig() {
