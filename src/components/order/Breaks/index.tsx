@@ -3,7 +3,17 @@ import moment from 'moment'
 import { IActualBreak, IOrder } from '../../../types/types'
 import { tBreak } from './texts'
 import { TRANSLATION } from '../../../localization'
+import { dateFormat } from '../../../tools/utils'
 import './styles.scss'
+
+/**
+ * Метка времени сервера в миллисекунды.
+ *
+ * Формат разбираем явно: сервер отдаёт `2026-03-18 10:03:46+00:00` — через
+ * пробел, как принято в проекте (dateFormat). Date.parse на такой строке
+ * ведёт себя по-разному в разных браузерах, вплоть до NaN.
+ */
+const parseServer = (value: string): number => moment(value, dateFormat).valueOf()
 
 /**
  * Текущее время сервера.
@@ -17,7 +27,7 @@ const useServerNow = (serverTime?: string): (() => number) => {
   const [, tick] = useState(0)
 
   useEffect(() => {
-    if (serverTime) offset.current = Date.parse(serverTime) - Date.now()
+    if (serverTime) offset.current = parseServer(serverTime) - Date.now()
   }, [serverTime])
 
   useEffect(() => {
@@ -38,7 +48,7 @@ const formatDuration = (seconds: number): string => {
   return `${total} с`
 }
 
-const formatTime = (iso: string): string => moment(iso).format('HH:mm')
+const formatTime = (value: string): string => moment(value, dateFormat).format('HH:mm')
 
 interface IProps {
   order: IOrder
@@ -56,7 +66,7 @@ const Breaks: React.FC<IProps> = ({ order }) => {
   // Показатели с сервера актуальны на момент server_time. Между опросами
   // растёт только один из счётчиков — в зависимости от текущего режима
   const elapsed = order.server_time && mode !== null ?
-    Math.max(0, (serverNow() - Date.parse(order.server_time)) / 1000) :
+    Math.max(0, (serverNow() - parseServer(order.server_time)) / 1000) :
     0
 
   const totalSeconds = actual.total_seconds + elapsed
@@ -70,7 +80,7 @@ const Breaks: React.FC<IProps> = ({ order }) => {
     <li key={item.id} className="breaks_item">
       <span>{formatTime(item.started)} — {formatTime(item.ended as string)}</span>
       <span className="breaks_item-duration">
-        {formatDuration((Date.parse(item.ended as string) - Date.parse(item.started)) / 1000)}
+        {formatDuration((parseServer(item.ended as string) - parseServer(item.started)) / 1000)}
       </span>
     </li>
   )
@@ -85,7 +95,7 @@ const Breaks: React.FC<IProps> = ({ order }) => {
           <span className="breaks_state-since">
             {tBreak(TRANSLATION.BREAK_ON_SINCE)} {formatTime(activeBreak.started)}
             {' · '}
-            {formatDuration((serverNow() - Date.parse(activeBreak.started)) / 1000)}
+            {formatDuration((serverNow() - parseServer(activeBreak.started)) / 1000)}
           </span>
         )}
       </div>
