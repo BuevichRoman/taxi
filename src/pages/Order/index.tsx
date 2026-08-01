@@ -54,6 +54,17 @@ interface IFormValues {
   performers_price: number
 }
 
+/**
+ * Коды отказа сервера в тексты. Нужны на случай, если запрос всё же уйдёт:
+ * состояние могло измениться между опросом и нажатием
+ */
+const BREAK_ERROR_TEXTS: Record<string, string> = {
+  break_already_active: TRANSLATION.BREAK_ALREADY_ACTIVE,
+  break_not_active: TRANSLATION.BREAK_NOT_ACTIVE,
+  order_not_started: TRANSLATION.BREAK_NOT_ACTIVE,
+  order_finished: TRANSLATION.ORDER_ALREADY_FINISHED,
+}
+
 interface IProps extends ConnectedProps<typeof connector> {}
 
 const Order: React.FC<IProps> = ({
@@ -172,22 +183,53 @@ const Order: React.FC<IProps> = ({
   }
 
   /**
+   * Проверка допустимости действия перед отправкой (ТЗ п. 14).
+   *
+   * Сервер этих проверок не делает — автор кода ответил, что бэкенд не
+   * дорабатывается и дубли отлавливает клиент. Возвращает ключ текста
+   * отказа либо null, если действие допустимо.
+   */
+  const breakActionError = (isStart: boolean): string | null => {
+    const execution = order?.b_options?.b_execution
+    const mode = execution?.mode ?? null
+
+    if (execution?.actual.ended || (mode === null && execution?.actual.started))
+      return TRANSLATION.ORDER_ALREADY_FINISHED
+    if (isStart && mode === 'break') return TRANSLATION.BREAK_ALREADY_ACTIVE
+    if (!isStart && mode !== 'break') return TRANSLATION.BREAK_NOT_ACTIVE
+    return null
+  }
+
+  /**
    * Начало и окончание перерыва. Заказ остаётся выполняющимся, меняется
-   * только внутренний режим (ТЗ п. 7). Проверки допустимости выполняет
-   * сервер, поэтому его отказ показываем как есть
+   * только внутренний режим (ТЗ п. 7)
    */
   const onBreakConfirmed = () => {
+    // Подтверждение смонтировано всегда, видимостью управляет оверлей:
+    // без этой проверки «Да» при закрытом окне отправляло завершение перерыва
+    if (breakConfirm === null) return
+
     const isStart = breakConfirm === 'start'
     setBreakConfirm(null)
 
+    const error = breakActionError(isStart)
+    if (error) {
+      setMessageModal({ isOpen: true, status: EStatuses.Fail, message: tBreak(error) })
+      return
+    }
+
     API.setBreakState(id, isStart)
       .then(() => getOrder(id))
-      .catch((error: { message?: string }) => {
+      .catch((error: { code?: string, message?: string }) => {
         console.error(error)
+        // Код отказа показываем текстом: раньше няня видела в лицо строку
+        // вида break_not_active
+        const known = error?.code ? BREAK_ERROR_TEXTS[error.code] : undefined
+
         setMessageModal({
           isOpen: true,
           status: EStatuses.Fail,
-          message: error?.message || t(TRANSLATION.ERROR),
+          message: known ? tBreak(known) : t(TRANSLATION.ERROR),
         })
       })
   }
