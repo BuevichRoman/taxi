@@ -4,6 +4,7 @@ import { IActualBreak, IOrder } from '../../../types/types'
 import { tBreak } from './texts'
 import { TRANSLATION } from '../../../localization'
 import { dateFormat } from '../../../tools/utils'
+import { calculateFinalPrice } from '../../../tools/order'
 import './styles.scss'
 
 /**
@@ -16,11 +17,14 @@ import './styles.scss'
 const parseServer = (value: string): number => moment(value, dateFormat).valueOf()
 
 /**
- * Текущее время сервера.
+ * Текущее время для таймеров.
  *
- * Часы устройства использовать нельзя (ТЗ п. 4), поэтому смещение считается
- * один раз по метке server_time из ответа, а дальше время идёт от него.
- * Пересчитывается при каждом новом ответе сервера.
+ * По ТЗ (п. 4) отсчёт ведётся от серверного времени, но боевой API своего
+ * времени не отдаёт — автор кода подтвердил, что получить его неоткуда.
+ * Поэтому: если метка в ответе есть, смещение часов устройства считается по
+ * ней и дальше время идёт от неё; если нет — идём от часов устройства.
+ * Расхождение влияет только на отображение секунд между опросами, все
+ * сохранённые отметки времени приходят с сервера.
  */
 const useServerNow = (serverTime?: string): (() => number) => {
   const offset = useRef(0)
@@ -36,6 +40,21 @@ const useServerNow = (serverTime?: string): (() => number) => {
   }, [])
 
   return () => Date.now() + offset.current
+}
+
+/**
+ * Момент, к которому относятся показатели ответа: метка сервера, если она
+ * пришла, иначе время получения ответа. Пересчитывается на каждом новом
+ * ответе — от этой точки растут счётчики между опросами.
+ */
+const useMeasuredAt = (execution: unknown, serverTime?: string): number => {
+  const at = useRef(Date.now())
+
+  useEffect(() => {
+    at.current = serverTime ? parseServer(serverTime) : Date.now()
+  }, [execution, serverTime])
+
+  return at.current
 }
 
 const formatDuration = (seconds: number): string => {
@@ -55,18 +74,21 @@ interface IProps {
 }
 
 const Breaks: React.FC<IProps> = ({ order }) => {
-  const execution = order.b_execution
+  // Перерывы лежат внутри b_options: своих полей верхнего уровня заказ
+  // не принимает, произвольные ключи допустимы только там
+  const execution = order.b_options?.b_execution
   const serverNow = useServerNow(order.server_time)
+  const measuredAt = useMeasuredAt(execution, order.server_time)
 
   if (!execution || !execution.actual.started) return null
 
   const { actual, estimate, mode } = execution
   const onBreak = mode === 'break'
 
-  // Показатели с сервера актуальны на момент server_time. Между опросами
+  // Показатели из ответа актуальны на момент measuredAt. Между опросами
   // растёт только один из счётчиков — в зависимости от текущего режима
-  const elapsed = order.server_time && mode !== null ?
-    Math.max(0, (serverNow() - parseServer(order.server_time)) / 1000) :
+  const elapsed = mode !== null ?
+    Math.max(0, (serverNow() - measuredAt) / 1000) :
     0
 
   const totalSeconds = actual.total_seconds + elapsed
@@ -75,6 +97,34 @@ const Breaks: React.FC<IProps> = ({ order }) => {
 
   const activeBreak = actual.breaks.find(item => item.ended === null)
   const visibleBreaks = actual.breaks.filter(item => item.display && item.ended !== null)
+
+  /**
+   * Стоимость по оплачиваемому времени. Считается тем же механизмом, что и
+   * везде в приложении (ТЗ п. 11: единый алгоритм расчёта), — подставляем в
+   * модель длительность в минутах и отдаём в существующую формулу
+   */
+  const priceFor = (billableSeconds: number): string => {
+    const model = order.b_options?.pricingModel
+    if (!model) return '—'
+
+    return calculateFinalPrice({
+      ...order,
+      b_options: {
+        ...order.b_options,
+        pricingModel: {
+          ...model,
+          options: { ...model.options, duration: Math.ceil(billableSeconds / 60) },
+        },
+      },
+    }).toString()
+  }
+
+  /** Отклонение факта от плана со знаком */
+  const deviation = (fact: number, plan: number): string => {
+    const diff = Math.round(fact - plan)
+    if (diff === 0) return '—'
+    return `${diff > 0 ? '+' : '−'}${formatDuration(Math.abs(diff))}`
+  }
 
   const renderBreak = (item: IActualBreak) => (
     <li key={item.id} className="breaks_item">
@@ -89,7 +139,9 @@ const Breaks: React.FC<IProps> = ({ order }) => {
     <div className={`breaks ${onBreak ? 'breaks--on-break' : ''}`}>
       <div className="breaks_state">
         <span className="breaks_state-label">
-          {onBreak ? tBreak(TRANSLATION.STATE_ON_BREAK) : tBreak(TRANSLATION.STATE_WORKING)}
+          {actual.ended ?
+            tBreak(TRANSLATION.STATE_FINISHED) :
+            tBreak(onBreak ? TRANSLATION.STATE_ON_BREAK : TRANSLATION.STATE_WORKING)}
         </span>
         {activeBreak && (
           <span className="breaks_state-since">
@@ -100,6 +152,8 @@ const Breaks: React.FC<IProps> = ({ order }) => {
         )}
       </div>
 
+      {/* У завершённого заказа те же цифры показывает сводка ниже */}
+      {!actual.ended && <>
       <dl className="breaks_totals">
         <div>
           <dt>{tBreak(TRANSLATION.TIME_TOTAL)}</dt>
@@ -122,6 +176,46 @@ const Breaks: React.FC<IProps> = ({ order }) => {
           {' '}{tBreak(TRANSLATION.TIME_BREAKS).toLowerCase()}
           {' '}{formatDuration(estimate.break_seconds)}
         </div>
+      )}
+      </>}
+
+      {actual.ended && (
+        <table className="breaks_summary">
+          <thead>
+            <tr>
+              <th />
+              <th>{tBreak(TRANSLATION.PLAN_SHORT)}</th>
+              <th>{tBreak(TRANSLATION.FACT_SHORT)}</th>
+              <th>{tBreak(TRANSLATION.DEVIATION)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{tBreak(TRANSLATION.TIME_TOTAL)}</td>
+              <td>{estimate ? formatDuration(estimate.total_seconds) : '—'}</td>
+              <td>{formatDuration(actual.total_seconds)}</td>
+              <td>{estimate ? deviation(actual.total_seconds, estimate.total_seconds) : '—'}</td>
+            </tr>
+            <tr>
+              <td>{tBreak(TRANSLATION.TIME_WORK)}</td>
+              <td>{estimate ? formatDuration(estimate.work_seconds) : '—'}</td>
+              <td>{formatDuration(actual.work_seconds)}</td>
+              <td>{estimate ? deviation(actual.work_seconds, estimate.work_seconds) : '—'}</td>
+            </tr>
+            <tr>
+              <td>{tBreak(TRANSLATION.TIME_BREAKS)}</td>
+              <td>{estimate ? formatDuration(estimate.break_seconds) : '—'}</td>
+              <td>{formatDuration(actual.break_seconds)}</td>
+              <td>{estimate ? deviation(actual.break_seconds, estimate.break_seconds) : '—'}</td>
+            </tr>
+            <tr>
+              <td>{tBreak(TRANSLATION.PRICE_FINAL)}</td>
+              <td>{estimate ? priceFor(estimate.billable_work_seconds) : '—'}</td>
+              <td>{priceFor(actual.billable_work_seconds)}</td>
+              <td />
+            </tr>
+          </tbody>
+        </table>
       )}
 
       <div className="breaks_list">

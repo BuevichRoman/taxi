@@ -25,6 +25,14 @@ const FALLBACK: Record<string, string> = {
   [TRANSLATION.STATE_WORKING]: 'Работа',
   [TRANSLATION.STATE_ON_BREAK]: 'Перерыв',
   [TRANSLATION.PLAN_SHORT]: 'План',
+  [TRANSLATION.STATE_FINISHED]: 'Заказ завершён',
+  [TRANSLATION.FACT_SHORT]: 'Факт',
+  [TRANSLATION.DEVIATION]: 'Отклонение',
+  [TRANSLATION.PRICE_PRELIMINARY]: 'Предварительная стоимость',
+  [TRANSLATION.PRICE_FINAL]: 'Итоговая стоимость',
+  [TRANSLATION.BREAK_ALREADY_ACTIVE]: 'Перерыв уже идёт',
+  [TRANSLATION.BREAK_NOT_ACTIVE]: 'Перерыв не начат',
+  [TRANSLATION.ORDER_ALREADY_FINISHED]: 'Заказ уже завершён',
 }
 
 /** Как t(), но с запасным текстом вместо 'Error' для ключей перерывов */

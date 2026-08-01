@@ -295,7 +295,7 @@ const Order: React.FC<IProps> = ({
       />
     </>
     if (driver?.c_state === EBookingDriverState.Started) return <>
-      {order.b_execution?.mode === 'break' ?
+      {order.b_options?.b_execution?.mode === 'break' ?
         <Button
           text={tBreak(TRANSLATION.BREAK_END)}
           className="order_take-order-btn"
