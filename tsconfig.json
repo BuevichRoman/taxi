@@ -26,5 +26,9 @@
       "@mona-health/react-input-mask": ["./node_modules/@types/react-input-mask"]
     },
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Тесты проверяет jest, а не tsc: типов jest в проекте нет, а поставить
+  // их нельзя — npm install падает на мусорной зависимости с именем "-"
+  // в package.json (её удаление вынесено отдельно)
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

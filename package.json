@@ -113,6 +113,7 @@
         "build": "run-script-os",
         "build:default": "set NODE_OPTIONS=--openssl-legacy-provider && node scripts/build.js",
         "build:nix": "NODE_OPTIONS=--openssl-legacy-provider node scripts/build.js",
+        "test": "node scripts/test.js",
         "prepare-build": "npm version patch && node pre-build.js",
         "lint-fix": "eslint src/**/*.{ts,tsx} --fix"
     },
@@ -149,7 +150,7 @@
         ],
         "testEnvironment": "jest-environment-jsdom-fourteen",
         "transform": {
-            "^.+\\.(js|jsx|ts|tsx)$": "<rootDir>/node_modules/babel-jest",
+            "^.+\\.(js|jsx|ts|tsx)$": "<rootDir>/config/jest/babelTransform.js",
             "^.+\\.css$": "<rootDir>/config/jest/cssTransform.js",
             "^(?!.*\\.(js|jsx|ts|tsx|css|json)$)": "<rootDir>/config/jest/fileTransform.js"
         },
