@@ -4,7 +4,7 @@ import { IActualBreak, IOrder } from '../../../types/types'
 import { tBreak } from './texts'
 import { TRANSLATION } from '../../../localization'
 import { dateFormat } from '../../../tools/utils'
-import { calculateFinalPrice } from '../../../tools/order'
+import { calculateFinalPrice, getExecution } from '../../../tools/order'
 import './styles.scss'
 
 /**
@@ -74,9 +74,9 @@ interface IProps {
 }
 
 const Breaks: React.FC<IProps> = ({ order }) => {
-  // Перерывы лежат внутри b_options: своих полей верхнего уровня заказ
-  // не принимает, произвольные ключи допустимы только там
-  const execution = order.b_options?.b_execution
+  // План и факт хранятся раздельно: план — в b_options заказа, факт — в
+  // c_options няни. Писать в b_options исполнителю нельзя
+  const execution = getExecution(order)
   const serverNow = useServerNow(order.server_time)
   const measuredAt = useMeasuredAt(execution, order.server_time)
 

@@ -128,6 +128,11 @@ export interface IBookingCoordinates extends IBookingCoordinatesLatitude, IBooki
 
 export interface ICarOptions {
   performers_price: number
+  /**
+   * Ход выполнения: режим и фактические перерывы. Пишет няня действием
+   * `edit`, читают и няня, и заказчик
+   */
+  c_execution?: ICarExecution
 }
 
 export enum EDriverResponseModes {
@@ -243,10 +248,11 @@ export interface IOptions {
     calculationType?: string
   }
   /**
-   * Перерывы и показатели времени по плану и по факту.
-   * Отсутствует у заказов, начатых до включения функционала
+   * Плановая смета: предполагаемые перерывы и показатели времени.
+   * Отсутствует у заказов, созданных до включения функционала.
+   * Факт лежит отдельно, в `c_options.c_execution` няни
    */
-  b_execution?: IOrderExecution
+  b_execution?: IOrderEstimate
   /**
    * Предполагаемое окончание заказа: начало плюс число часов, названное
    * заказчиком. Своего поля под длительность в схеме заказа нет
@@ -295,27 +301,53 @@ interface IExecutionTotals {
   billable_work_seconds: number
 }
 
+/** Плановая смета. После начала заказа не изменяется */
+export type IExecutionEstimate = IExecutionTotals & {
+  started: string
+  ended: string
+  breaks: IPlannedBreak[]
+}
+
+/** Фактические показатели */
+export type IExecutionActual = IExecutionTotals & {
+  started: string | null
+  ended: string | null
+  breaks: IActualBreak[]
+}
+
 /**
- * Плановые и фактические показатели выполнения заказа.
- * Лежат в `b_options.b_execution`: произвольные поля заказа допустимы
- * только внутри `b_options` и только из списка `b_options_valid_keys`
+ * Плановая смета заказа. Лежит в `b_options.b_execution`, пишет её заказчик
+ * при создании заказа: произвольные поля заказа допустимы только внутри
+ * `b_options` и только из списка `b_options_valid_keys`
  */
-export interface IOrderExecution {
+export interface IOrderEstimate {
+  schema_version: number
+  estimate: IExecutionEstimate | null
+}
+
+/**
+ * Ход выполнения со стороны няни. Лежит в `c_options.c_execution` — своём
+ * поле исполнителя по заказу.
+ *
+ * В `b_options` это не положить: метод `edit` собирает список разрешённых
+ * полей раздельно, и у исполнителя там стоит только `c_options`
+ */
+export interface ICarExecution {
   schema_version: number
   /** Текущий режим. null до начала работы и после завершения заказа */
   mode: 'work' | 'break' | null
-  /** Плановая смета. После начала заказа не изменяется */
-  estimate: (IExecutionTotals & {
-    started: string
-    ended: string
-    breaks: IPlannedBreak[]
-  }) | null
-  /** Фактические показатели */
-  actual: IExecutionTotals & {
-    started: string | null
-    ended: string | null
-    breaks: IActualBreak[]
-  }
+  actual: IExecutionActual
+}
+
+/**
+ * План и факт, сведённые вместе. Хранятся раздельно, но экранам нужны
+ * одновременно — сводит `getExecution` из `tools/order`
+ */
+export interface IOrderExecution {
+  schema_version: number
+  mode: 'work' | 'break' | null
+  estimate: IExecutionEstimate | null
+  actual: IExecutionActual
 }
 
 export interface IOrder

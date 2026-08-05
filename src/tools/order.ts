@@ -7,9 +7,56 @@ import {
   EOrderProfitRank,
   IOrder,
   ICar,
+  ICarExecution,
   IOrderEstimation,
+  IOrderExecution,
 } from '../types/types'
 import { IWayGraph, IWayGraphNode } from './maps'
+
+/**
+ * План и факт перерывов, сведённые вместе.
+ *
+ * Хранятся раздельно и пишутся разными людьми: план — заказчиком в
+ * `b_options.b_execution` при создании заказа, факт — няней в своём
+ * `c_options.c_execution`. В `b_options` няне писать нельзя: метод `edit`
+ * разрешает исполнителю только `c_options`.
+ *
+ * @param uId идентификатор няни. Заказчик видит блоки всех исполнителей,
+ *   няня — только свой, поэтому без подсказки берём первый попавшийся
+ */
+export const getExecution = (
+  order: IOrder | null,
+  uId?: string,
+): IOrderExecution | null => {
+  if (!order) return null
+
+  const drivers = order.drivers ?? []
+  const mine = uId ? drivers.find(item => item.u_id === uId) : undefined
+  const carried: ICarExecution | undefined =
+    (mine ?? drivers.find(item => item.c_options?.c_execution))
+      ?.c_options?.c_execution
+
+  const estimate = order.b_options?.b_execution?.estimate ?? null
+  if (!carried && !estimate) return null
+
+  return {
+    schema_version:
+      carried?.schema_version ??
+      order.b_options?.b_execution?.schema_version ??
+      0,
+    mode: carried?.mode ?? null,
+    estimate,
+    actual: carried?.actual ?? {
+      started: null,
+      ended: null,
+      breaks: [],
+      total_seconds: 0,
+      work_seconds: 0,
+      break_seconds: 0,
+      billable_work_seconds: 0,
+    },
+  }
+}
 
 export function updateCompletedOrderDuration(order: IOrder): IOrder {
   if (

@@ -5,6 +5,8 @@ import PageSection from '../../components/PageSection'
 import Button from '../../components/Button'
 import Input from '../../components/Input'
 import { addHiddenOrder } from '../../tools/utils'
+import { getExecution } from '../../tools/order'
+import { applyBreakAction, breakActionError, finishExecution } from '../../tools/execution'
 import * as API from '../../API'
 import { t, TRANSLATION } from '../../localization'
 import ClientInfo from '../../components/order/ClientInfo'
@@ -52,17 +54,6 @@ const connector = connect(mapStateToProps, mapDispatchToProps)
 interface IFormValues {
   votingNumber: number
   performers_price: number
-}
-
-/**
- * Коды отказа сервера в тексты. Нужны на случай, если запрос всё же уйдёт:
- * состояние могло измениться между опросом и нажатием
- */
-const BREAK_ERROR_TEXTS: Record<string, string> = {
-  break_already_active: TRANSLATION.BREAK_ALREADY_ACTIVE,
-  break_not_active: TRANSLATION.BREAK_NOT_ACTIVE,
-  order_not_started: TRANSLATION.BREAK_NOT_ACTIVE,
-  order_finished: TRANSLATION.ORDER_ALREADY_FINISHED,
 }
 
 interface IProps extends ConnectedProps<typeof connector> {}
@@ -161,8 +152,18 @@ const Order: React.FC<IProps> = ({
       return
     }
 
-    
-    API.setOrderState(id, EBookingDriverState.Finished)
+    // Завершать во время перерыва можно (ТЗ п. 12): сначала закрываем
+    // открытый перерыв и снимаем режим, потом завершаем сам заказ. Порядок
+    // важен — после завершения edit заказа исполнителю уже недоступен
+    const finished = finishExecution(
+      driver.c_options?.c_execution,
+      driver.c_started ? String(driver.c_started) : null,
+      new Date(),
+    )
+
+    API.saveExecution(id, finished)
+      .catch(error => console.error(error))
+      .then(() => API.setOrderState(id, EBookingDriverState.Finished))
       .then(() => {
         getOrder(id)
         setMessageModal({
@@ -182,23 +183,9 @@ const Order: React.FC<IProps> = ({
       })
   }
 
-  /**
-   * Проверка допустимости действия перед отправкой (ТЗ п. 14).
-   *
-   * Сервер этих проверок не делает — автор кода ответил, что бэкенд не
-   * дорабатывается и дубли отлавливает клиент. Возвращает ключ текста
-   * отказа либо null, если действие допустимо.
-   */
-  const breakActionError = (isStart: boolean): string | null => {
-    const execution = order?.b_options?.b_execution
-    const mode = execution?.mode ?? null
-
-    if (execution?.actual.ended || (mode === null && execution?.actual.started))
-      return TRANSLATION.ORDER_ALREADY_FINISHED
-    if (isStart && mode === 'break') return TRANSLATION.BREAK_ALREADY_ACTIVE
-    if (!isStart && mode !== 'break') return TRANSLATION.BREAK_NOT_ACTIVE
-    return null
-  }
+  /** Проверка допустимости действия перед отправкой (ТЗ п. 14) */
+  const checkBreakAction = (isStart: boolean): string | null =>
+    breakActionError(getExecution(order, driver?.u_id), isStart)
 
   /**
    * Начало и окончание перерыва. Заказ остаётся выполняющимся, меняется
@@ -212,24 +199,34 @@ const Order: React.FC<IProps> = ({
     const isStart = breakConfirm === 'start'
     setBreakConfirm(null)
 
-    const error = breakActionError(isStart)
+    const error = checkBreakAction(isStart)
     if (error) {
       setMessageModal({ isOpen: true, status: EStatuses.Fail, message: tBreak(error) })
       return
     }
 
-    API.setBreakState(id, isStart)
+    // Блок считаем сами: сервер ничего не пересчитывает, для него это
+    // просто JSON. Момент начала работы берём из c_started — его пишет
+    // бэкенд действием set_start_state, дублировать не нужно
+    const next = applyBreakAction(
+      driver?.c_options?.c_execution,
+      isStart,
+      driver?.c_started ? String(driver.c_started) : null,
+      new Date(),
+    )
+
+    API.saveExecution(id, next)
       .then(() => getOrder(id))
       .catch((error: { code?: string, message?: string }) => {
         console.error(error)
-        // Код отказа показываем текстом: раньше няня видела в лицо строку
-        // вида break_not_active
-        const known = error?.code ? BREAK_ERROR_TEXTS[error.code] : undefined
-
+        // Своих кодов отказа у сервера нет: перерывы он не проверяет, а
+        // отвечает общими ошибками платформы. Допустимость действия
+        // проверяет breakActionError до отправки, сюда попадают только
+        // отказы записи — их показываем общим текстом
         setMessageModal({
           isOpen: true,
           status: EStatuses.Fail,
-          message: known ? tBreak(known) : t(TRANSLATION.ERROR),
+          message: t(TRANSLATION.ERROR),
         })
       })
   }
@@ -337,7 +334,7 @@ const Order: React.FC<IProps> = ({
       />
     </>
     if (driver?.c_state === EBookingDriverState.Started) return <>
-      {order.b_options?.b_execution?.mode === 'break' ?
+      {driver?.c_options?.c_execution?.mode === 'break' ?
         <Button
           text={tBreak(TRANSLATION.BREAK_END)}
           className="order_take-order-btn"

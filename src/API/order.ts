@@ -7,6 +7,7 @@ import {
   EPaymentWays,
   IBookingAddresses,
   IBookingCoordinates,
+  ICarExecution,
   IOrder,
   IUser,
 } from '../types/types'
@@ -357,24 +358,31 @@ const _setWaitingTime = (
  */
 export const setWaitingTime = apiMethod<typeof _setWaitingTime>(_setWaitingTime)
 
-const _setBreakState = (
+const _saveExecution = (
   { formData }: IApiMethodArguments,
   id: IOrder['b_id'],
-  isBreak: boolean,
+  execution: ICarExecution,
 ) => {
   addToFormData(formData, {
-    action: isBreak ?
-      EBookingActions.SetBreakStartState :
-      EBookingActions.SetBreakEndState,
+    action: EBookingActions.Edit,
+    // Список правок, а не объект: edit накладывает их поверх сохранённого
+    // и чужие ключи не затирает. Обычный объект отбивается как
+    // `c_options element not array`
+    data: JSON.stringify({ c_options: [['=', ['c_execution'], execution]] }),
   })
 
   return axios.post(`${Config.API_URL}/drive/get/${id}`, formData)
     .then(res => res.data)
-    .then(res => res.status === 'error' ? Promise.reject(res) : res)
+    // Именно на признак успеха, а не на отсутствие ошибки: неизвестное
+    // действие бэкенд не отвергает, а возвращает пустой ответ с кодом 200,
+    // и проверка «не ошибка» такой ответ пропускала как успешный
+    .then(res => res.status === 'success' ? res : Promise.reject(res))
 }
 /**
- * Starts or ends a break within an active order.
- * Order stays in progress, paid time is not accrued while on break.
- * @param isBreak true to start a break, false to resume work
+ * Saves the nanny's progress: current mode and actual breaks.
+ *
+ * Goes to `c_options` — the performer's own field on the order. `b_options`
+ * is not writable by a performer: the `edit` method builds its allowed-field
+ * list per role, and the performer only ever gets `c_options`.
  */
-export const setBreakState = apiMethod<typeof _setBreakState>(_setBreakState)
+export const saveExecution = apiMethod<typeof _saveExecution>(_saveExecution)
