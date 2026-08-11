@@ -7,6 +7,7 @@ import Input from '../../components/Input'
 import { addHiddenOrder } from '../../tools/utils'
 import { getExecution } from '../../tools/order'
 import { applyBreakAction, breakActionError, finishExecution } from '../../tools/execution'
+import { serverNow } from '../../tools/serverClock'
 import * as API from '../../API'
 import { t, TRANSLATION } from '../../localization'
 import ClientInfo from '../../components/order/ClientInfo'
@@ -158,7 +159,7 @@ const Order: React.FC<IProps> = ({
     const finished = finishExecution(
       driver.c_options?.c_execution,
       driver.c_started ? String(driver.c_started) : null,
-      new Date(),
+      serverNow(),
     )
 
     API.saveExecution(id, finished)
@@ -212,7 +213,7 @@ const Order: React.FC<IProps> = ({
       driver?.c_options?.c_execution,
       isStart,
       driver?.c_started ? String(driver.c_started) : null,
-      new Date(),
+      serverNow(),
     )
 
     API.saveExecution(id, next)

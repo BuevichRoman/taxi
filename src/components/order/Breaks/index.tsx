@@ -5,6 +5,7 @@ import { tBreak } from './texts'
 import { TRANSLATION } from '../../../localization'
 import { dateFormat } from '../../../tools/utils'
 import { calculateFinalPrice, getExecution } from '../../../tools/order'
+import { serverNow } from '../../../tools/serverClock'
 import './styles.scss'
 
 /**
@@ -19,12 +20,10 @@ const parseServer = (value: string): number => moment(value, dateFormat).valueOf
 /**
  * Текущее время для таймеров.
  *
- * По ТЗ (п. 4) отсчёт ведётся от серверного времени, но боевой API своего
- * времени не отдаёт — автор кода подтвердил, что получить его неоткуда.
- * Поэтому: если метка в ответе есть, смещение часов устройства считается по
- * ней и дальше время идёт от неё; если нет — идём от часов устройства.
- * Расхождение влияет только на отображение секунд между опросами, все
- * сохранённые отметки времени приходят с сервера.
+ * По ТЗ (п. 4) отсчёт ведётся от серверного времени. Источников два: метка
+ * прямо в ответе, если она есть, — она точнее, потому что относится к самим
+ * данным; иначе общие часы приложения, выправленные по заголовку `Date`
+ * ответов API (tools/serverClock). Часы устройства не используются.
  */
 const useServerNow = (serverTime?: string): (() => number) => {
   const offset = useRef(0)
@@ -39,7 +38,7 @@ const useServerNow = (serverTime?: string): (() => number) => {
     return () => clearInterval(timer)
   }, [])
 
-  return () => Date.now() + offset.current
+  return () => serverTime ? Date.now() + offset.current : serverNow().getTime()
 }
 
 /**
@@ -51,7 +50,7 @@ const useMeasuredAt = (execution: unknown, serverTime?: string): number => {
   const at = useRef(Date.now())
 
   useEffect(() => {
-    at.current = serverTime ? parseServer(serverTime) : Date.now()
+    at.current = serverTime ? parseServer(serverTime) : serverNow().getTime()
   }, [execution, serverTime])
 
   return at.current

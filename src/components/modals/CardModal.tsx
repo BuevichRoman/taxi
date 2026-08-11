@@ -35,6 +35,7 @@ import {
   breakActionError,
   finishExecution,
 } from '../../tools/execution'
+import { serverNow } from '../../tools/serverClock'
 import * as API from '../../API'
 import { useCachedState, useSelector } from '../../tools/hooks'
 import { t, TRANSLATION } from '../../localization'
@@ -222,7 +223,7 @@ function CardModalContent({
       const finished = finishExecution(
         userAsDriver.c_options?.c_execution,
         userAsDriver.c_started ? String(userAsDriver.c_started) : null,
-        new Date(),
+        serverNow(),
       )
       await API.saveExecution(orderId, finished)
     }
@@ -260,7 +261,7 @@ function CardModalContent({
         userAsDriver?.c_options?.c_execution,
         isStart,
         userAsDriver?.c_started ? String(userAsDriver.c_started) : null,
-        new Date(),
+        serverNow(),
       )
       await API.saveExecution(orderId, next)
       watchOrder(orderId)
