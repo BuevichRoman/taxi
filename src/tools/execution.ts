@@ -10,7 +10,9 @@
  * готовый блок, бот только читает числа. Иначе получилось бы две реализации
  * одного расчёта — ровно то, что уже случилось со стоимостью.
  *
- * Все функции чистые и принимают текущее время аргументом.
+ * Расчётные функции чистые и принимают текущее время аргументом. Из внешнего
+ * состояния читается только конфигурация тенанта — параметры перерывов по ТЗ
+ * живут в ней, а не в коде.
  */
 
 import moment from 'moment'
@@ -22,18 +24,51 @@ import {
 } from '../types/types'
 
 /**
+ * Числовая константа тенанта в секундах, либо запасное значение.
+ *
+ * Читается на каждый вызов, а не один раз при загрузке модуля: конфиг тенанта
+ * приезжает отдельным скриптом уже после старта приложения (applyConfigName
+ * в config.ts), и на момент импорта его ещё нет.
+ */
+const constantSeconds = (key: string, fallback: number): number => {
+  const raw = typeof window === 'undefined' ?
+    undefined :
+    (window as any).data?.site_constants?.[key]?.value
+  const value = Number(raw)
+
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+/**
  * Минимальная отображаемая длительность перерыва в секундах (ТЗ п. 20).
  * Более короткие завершённые перерывы не попадают в списки, но участвуют
  * в суммах и в расчёте стоимости.
+ *
+ * Значение живёт в конфигурации тенанта, как того требует ТЗ. Запасное
+ * работает, пока константы там нет, — прежнее поведение.
  */
-export const MIN_VISIBLE_BREAK_DURATION = 60
+export const MIN_VISIBLE_BREAK_DURATION_FALLBACK = 60
+
+export const minVisibleBreakDuration = (): number =>
+  constantSeconds(
+    'min_visible_break_duration',
+    MIN_VISIBLE_BREAK_DURATION_FALLBACK,
+  )
 
 /**
- * Округление оплачиваемого времени (ТЗ п. 11.1). Правила в системе нет:
- * формула принимает длительность в минутах, перерывы идут в секундах.
- * Автор кода на вопрос 8 ответил «вверх».
+ * Единица округления оплачиваемого времени (ТЗ п. 11.1). Правила в системе
+ * нет: формула принимает длительность в минутах, перерывы идут в секундах.
+ *
+ * В конфигурации живёт только единица. Направление осталось в коде: автор
+ * кода на вопрос 8 ответил «вверх», и это правило, а не число.
  */
-export const ROUNDING_UNIT_SECONDS = 60
+export const ROUNDING_UNIT_SECONDS_FALLBACK = 60
+
+export const roundingUnitSeconds = (): number =>
+  constantSeconds(
+    'break_rounding_unit_seconds',
+    ROUNDING_UNIT_SECONDS_FALLBACK,
+  )
 
 /** Версия схемы блока. Меняется при несовместимых правках формата. */
 export const SCHEMA_VERSION = 1
@@ -51,8 +86,11 @@ const parse = (value: string): number => moment(value, dateFormat).valueOf()
 const spanSeconds = (from: string, toMs: number): number =>
   Math.max(0, (toMs - parse(from)) / 1000)
 
-export const roundSeconds = (seconds: number): number =>
-  Math.ceil(Math.max(0, seconds) / ROUNDING_UNIT_SECONDS) * ROUNDING_UNIT_SECONDS
+export const roundSeconds = (seconds: number): number => {
+  const unit = roundingUnitSeconds()
+
+  return Math.ceil(Math.max(0, seconds) / unit) * unit
+}
 
 /**
  * Показывать ли перерыв. Активный показывается всегда — скрываются только
@@ -60,7 +98,7 @@ export const roundSeconds = (seconds: number): number =>
  */
 const isDisplayed = (item: { started: string, ended: string | null }): boolean =>
   item.ended === null ||
-  spanSeconds(item.started, parse(item.ended)) >= MIN_VISIBLE_BREAK_DURATION
+  spanSeconds(item.started, parse(item.ended)) >= minVisibleBreakDuration()
 
 /** Суммарная длительность перерывов, включая скрытые и незавершённый */
 const breakSecondsOf = (

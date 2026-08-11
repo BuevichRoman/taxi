@@ -8,12 +8,15 @@
 
 import {
   BREAK_ERRORS,
-  MIN_VISIBLE_BREAK_DURATION,
+  MIN_VISIBLE_BREAK_DURATION_FALLBACK,
+  ROUNDING_UNIT_SECONDS_FALLBACK,
   applyBreakAction,
   breakActionError,
   buildActual,
   finishExecution,
+  minVisibleBreakDuration,
   roundSeconds,
+  roundingUnitSeconds,
   totalsFrom,
 } from './execution'
 import { ICarExecution } from '../types/types'
@@ -100,13 +103,62 @@ describe('Короткие перерывы (п. 20)', () => {
 
     expect(actual.breaks[0].display).toBe(false)
     expect(actual.break_seconds).toBe(30)
-    expect(MIN_VISIBLE_BREAK_DURATION).toBe(60)
+    expect(MIN_VISIBLE_BREAK_DURATION_FALLBACK).toBe(60)
   })
 
   it('активный показывается всегда', () => {
     const breaks = [{ id: '1', started: at(59.9), ended: null, display: false }]
 
     expect(buildActual(started, null, breaks, dateAt(60)).breaks[0].display).toBe(true)
+  })
+})
+
+describe('Параметры из конфигурации тенанта (п. 11.1, п. 20)', () => {
+  /** Конфиг тенанта так и лежит в window.data — его приносит отдельный скрипт */
+  const setConstants = (values?: Record<string, string>) => {
+    (window as any).data = values ?
+      {
+        site_constants: Object.fromEntries(
+          Object.entries(values).map(([key, value]) => [key, { value }]),
+        ),
+      } :
+      undefined
+  }
+
+  afterEach(() => setConstants())
+
+  it('без конфига работают запасные значения', () => {
+    expect(minVisibleBreakDuration()).toBe(MIN_VISIBLE_BREAK_DURATION_FALLBACK)
+    expect(roundingUnitSeconds()).toBe(ROUNDING_UNIT_SECONDS_FALLBACK)
+  })
+
+  it('значения берутся из site_constants', () => {
+    setConstants({
+      min_visible_break_duration: '120',
+      break_rounding_unit_seconds: '300',
+    })
+
+    expect(minVisibleBreakDuration()).toBe(120)
+    expect(roundingUnitSeconds()).toBe(300)
+    expect(roundSeconds(1)).toBe(300)
+  })
+
+  it('перерыв скрывается по значению из конфига, а не по зашитой минуте', () => {
+    setConstants({ min_visible_break_duration: '120' })
+    const breaks = [{ id: '1', started: at(10), ended: at(11), display: true }]
+
+    expect(buildActual(started, null, breaks, dateAt(60)).breaks[0].display)
+      .toBe(false)
+  })
+
+  it('негодное значение константы не ломает расчёт', () => {
+    setConstants({
+      min_visible_break_duration: 'нет',
+      break_rounding_unit_seconds: '0',
+    })
+
+    expect(minVisibleBreakDuration()).toBe(MIN_VISIBLE_BREAK_DURATION_FALLBACK)
+    expect(roundingUnitSeconds()).toBe(ROUNDING_UNIT_SECONDS_FALLBACK)
   })
 })
 
