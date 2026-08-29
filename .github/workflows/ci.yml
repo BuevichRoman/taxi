@@ -33,14 +33,10 @@ jobs:
       - name: Зависимости мока
         run: npm ci --prefix e2e/mock-server || npm install --prefix e2e/mock-server
       - run: npx playwright install --with-deps chromium
-      - name: Сборка против мока
-        run: npm run build
-        env:
-          # Приложение и API отвечают с одного адреса: статику отдаёт
-          # e2e/static-server.mjs, запросы к API он проксирует в мок
-          REACT_APP_SERVER_URL: http://localhost:4173
-          CI: 'false'
-      - run: npx playwright test
+      # Та же команда, что и локально: сборка против мока + прогон сценариев.
+      # Собственный CI=false внутри скрипта касается только сборки —
+      # create-react-app иначе считает предупреждения ошибками
+      - run: npm run e2e
         env:
           CI: 'true'
       - uses: actions/upload-artifact@v4
