@@ -4,6 +4,14 @@ on:
   push:
     branches: ['**']
   pull_request:
+  # Запуск руками со страницы Actions: прогнать всё или один файл сценариев,
+  # когда прогонять локально негде
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Файл или сценарий, например e2e/specs/breaks.spec.ts. Пусто — все'
+        required: false
+        default: ''
 
 jobs:
   unit:
@@ -44,9 +52,10 @@ jobs:
       - name: Прогон
         run: |
           set -o pipefail
-          npm run e2e 2>&1 | tee e2e-output.txt
+          npm run e2e -- $SPEC 2>&1 | tee e2e-output.txt
         env:
           CI: 'true'
+          SPEC: ${{ inputs.spec }}
 
       - name: Итог прогона — в сводку и в комментарий к PR
         if: always()
@@ -61,7 +70,7 @@ jobs:
           if [ -n "$start" ] && [ -n "$end" ]; then
             sed -n "${start},${end}p" e2e-output.txt | grep -v '^::' | head -n 200 > e2e-result.txt
           else
-            echo 'Сценарии не запускались — упала сборка. Последние строки лога:' > e2e-result.txt
+            echo 'До сценариев не дошло: упала сборка или ни один файл не подошёл под фильтр. Последние строки лога:' > e2e-result.txt
             tail -n 40 e2e-output.txt >> e2e-result.txt
           fi
           {
