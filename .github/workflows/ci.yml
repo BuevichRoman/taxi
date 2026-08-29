@@ -1,0 +1,51 @@
+name: Тесты
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  unit:
+    name: Модульные тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --watchAll=false
+        env:
+          CI: true
+
+  e2e:
+    name: Сценарии в браузере
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Зависимости мока
+        run: npm ci --prefix e2e/mock-server || npm install --prefix e2e/mock-server
+      - run: npx playwright install --with-deps chromium
+      - name: Сборка против мока
+        run: npm run build
+        env:
+          # Приложение и API отвечают с одного адреса: статику отдаёт
+          # e2e/static-server.mjs, запросы к API он проксирует в мок
+          REACT_APP_SERVER_URL: http://localhost:4173
+          CI: 'false'
+      - run: npx playwright test
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

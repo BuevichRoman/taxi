@@ -6,3 +6,8 @@ yarn.lock
 .idea
 .vscode
 .env
+
+# Прогон e2e: отчёты и следы падений
+/test-results
+/playwright-report
+/e2e/mock-server/node_modules
