@@ -83,11 +83,14 @@ jobs:
             echo "Полный лог: [прогон ${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > e2e-summary.md
           cat e2e-summary.md >> "$GITHUB_STEP_SUMMARY"
+          # У pull request'а из чужого форка токен только на чтение —
+          # комментарий не отправится, и это не повод ронять зелёный прогон
           if [ "${{ github.event_name }}" = 'pull_request' ]; then
             gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
               --body-file e2e-summary.md --edit-last \
             || gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
-              --body-file e2e-summary.md
+              --body-file e2e-summary.md \
+            || echo 'Комментарий не отправлен: у прогона нет прав на запись. Итог — выше и в Summary.'
           fi
 
       - uses: actions/upload-artifact@v4
