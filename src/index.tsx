@@ -12,6 +12,11 @@ import { LocalizationProvider } from '@mui/x-date-pickers'
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment'
 
 import * as serviceWorker from './serviceWorker'
+import { installServerClock } from './tools/serverClock'
+
+// Часы сервера (ТЗ п. 4). Ставится до первого запроса, чтобы смещение
+// посчиталось по самому первому ответу
+installServerClock()
 
 if(process.env.NODE_ENV === 'production') {
   Sentry.init({

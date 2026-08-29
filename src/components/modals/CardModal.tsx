@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { connect, ConnectedProps } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -28,7 +28,15 @@ import {
   calculateFinalPrice,
   calculateFinalPriceFormula,
   candidateMode,
+  getExecution,
 } from '../../tools/order'
+import {
+  applyBreakAction,
+  breakActionError,
+  finishExecution,
+} from '../../tools/execution'
+import { serverNow } from '../../tools/serverClock'
+import * as API from '../../API'
 import { useCachedState, useSelector } from '../../tools/hooks'
 import { t, TRANSLATION } from '../../localization'
 import { IRootState } from '../../state'
@@ -45,6 +53,8 @@ import { EDriverTabs } from '../../pages/Driver'
 import Icon from '../Icon'
 import Button from '../Button'
 import Input from '../Input'
+import BreakConfirmModal from '../order/Breaks/ConfirmModal'
+import { tBreak } from '../order/Breaks/texts'
 import { Loader } from '../loader/Loader'
 import '../Card/styles.scss'
 
@@ -173,6 +183,8 @@ function CardModalContent({
     false,
   )
 
+  const [breakConfirm, setBreakConfirm] = useState<'start' | 'end' | null>(null)
+
   const navigate = useNavigate()
 
   const { register, formState: { errors }, handleSubmit: formHandleSubmit, getValues } = useForm<IFormValues>({
@@ -204,11 +216,57 @@ function CardModalContent({
   })
 
   const onCompleteOrderClick = () => orderMutation(async() => {
+    // Завершать во время перерыва можно (ТЗ п. 12): сначала закрываем
+    // открытый перерыв, потом завершаем заказ. Порядок важен — после
+    // завершения edit заказа исполнителю уже недоступен
+    if (userAsDriver) {
+      const finished = finishExecution(
+        userAsDriver.c_options?.c_execution,
+        userAsDriver.c_started ? String(userAsDriver.c_started) : null,
+        serverNow(),
+      )
+      await API.saveExecution(orderId, finished)
+    }
+
     await setOrderState(orderId, EBookingDriverState.Finished)
     navigate(`/driver-order?tab=${EDriverTabs.Lite}`)
     setRatingModal({ isOpen: true, orderID: orderId })
     closeModal()
   })
+
+  /** Проверка допустимости действия перед отправкой (ТЗ п. 14) */
+  const checkBreakAction = (isStart: boolean): string | null =>
+    breakActionError(getExecution(order, user?.u_id), isStart)
+
+  /**
+   * Начало и окончание перерыва из карточки заказа. Заказ остаётся
+   * выполняющимся, меняется только внутренний режим (ТЗ п. 7)
+   */
+  const onBreakConfirmed = () => {
+    // Подтверждение смонтировано всегда, видимостью управляет оверлей:
+    // без этой проверки «Да» при закрытом окне отправляло бы действие
+    if (breakConfirm === null) return
+
+    const isStart = breakConfirm === 'start'
+    setBreakConfirm(null)
+
+    const error = checkBreakAction(isStart)
+    if (error) {
+      setMessageModal({ isOpen: true, status: EStatuses.Fail, message: tBreak(error) })
+      return
+    }
+
+    orderMutation(async() => {
+      const next = applyBreakAction(
+        userAsDriver?.c_options?.c_execution,
+        isStart,
+        userAsDriver?.c_started ? String(userAsDriver.c_started) : null,
+        serverNow(),
+      )
+      await API.saveExecution(orderId, next)
+      watchOrder(orderId)
+    })
+  }
 
   const cancelAndClose = () => orderMutation(async() => {
     await cancelOrder(orderId)
@@ -339,6 +397,19 @@ function CardModalContent({
       </>
     if (userAsDriver?.c_state === EBookingDriverState.Started)
       return <>
+        {userAsDriver?.c_options?.c_execution?.mode === 'break' ?
+          <Button
+            {...actionButtonProps}
+            text={tBreak(TRANSLATION.BREAK_END)}
+            onClick={() => setBreakConfirm('end')}
+          /> :
+          <Button
+            {...actionButtonProps}
+            className="order_break-btn"
+            text={tBreak(TRANSLATION.BREAK_START)}
+            onClick={() => setBreakConfirm('start')}
+          />
+        }
         <Button
           {...actionButtonProps}
           text={t(TRANSLATION.CLOSE_DRIVE)}
@@ -633,6 +704,15 @@ function CardModalContent({
               {getButtons()}
             </div>
           </form>
+
+          <BreakConfirmModal
+            isOpen={breakConfirm !== null}
+            text={tBreak(breakConfirm === 'end' ?
+              TRANSLATION.BREAK_END_CONFIRM :
+              TRANSLATION.BREAK_START_CONFIRM)}
+            onConfirm={onBreakConfirmed}
+            onCancel={() => setBreakConfirm(null)}
+          />
         </div>
 
       </div>

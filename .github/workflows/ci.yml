@@ -1,0 +1,101 @@
+name: Тесты
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  # Запуск руками со страницы Actions: прогнать всё или один файл сценариев,
+  # когда прогонять локально негде
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Файл или сценарий, например e2e/specs/breaks.spec.ts. Пусто — все'
+        required: false
+        default: ''
+
+jobs:
+  unit:
+    name: Модульные тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --watchAll=false
+        env:
+          CI: true
+
+  e2e:
+    name: Сценарии в браузере
+    runs-on: ubuntu-latest
+    # Итог прогона возвращается комментарием: тому, кто пишет сценарии, но не
+    # может запустить их у себя, читать логи сборки не нужно
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Зависимости мока
+        run: npm ci --prefix e2e/mock-server || npm install --prefix e2e/mock-server
+      - run: npx playwright install --with-deps chromium
+      # Та же команда, что и локально: сборка против мока + прогон сценариев.
+      # Собственный CI=false внутри скрипта касается только сборки —
+      # create-react-app иначе считает предупреждения ошибками
+      - name: Прогон
+        run: |
+          set -o pipefail
+          npm run e2e -- $SPEC 2>&1 | tee e2e-output.txt
+        env:
+          CI: 'true'
+          SPEC: ${{ inputs.spec }}
+
+      - name: Итог прогона — в сводку и в комментарий к PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Вывод сборки долетает в лог позже вывода прогона, поэтому берём не
+          # хвост файла, а кусок от «Running N tests» до строки с итогом:
+          # в него попадают и упавшие ожидания
+          start=$(grep -n -E 'Running [0-9]+ tests?' e2e-output.txt | head -1 | cut -d: -f1)
+          end=$(grep -n -E '^ +[0-9]+ (passed|failed|flaky|skipped|interrupted)' e2e-output.txt | tail -1 | cut -d: -f1)
+          if [ -n "$start" ] && [ -n "$end" ]; then
+            sed -n "${start},${end}p" e2e-output.txt | grep -v '^::' | head -n 200 > e2e-result.txt
+          else
+            echo 'До сценариев не дошло: упала сборка или ни один файл не подошёл под фильтр. Последние строки лога:' > e2e-result.txt
+            tail -n 40 e2e-output.txt >> e2e-result.txt
+          fi
+          {
+            echo "### Сценарии в браузере — ${{ job.status }}"
+            echo
+            echo '```'
+            cat e2e-result.txt
+            echo '```'
+            echo
+            echo "Полный лог: [прогон ${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          } > e2e-summary.md
+          cat e2e-summary.md >> "$GITHUB_STEP_SUMMARY"
+          # У pull request'а из чужого форка токен только на чтение —
+          # комментарий не отправится, и это не повод ронять зелёный прогон
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
+              --body-file e2e-summary.md --edit-last \
+            || gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
+              --body-file e2e-summary.md \
+            || echo 'Комментарий не отправлен: у прогона нет прав на запись. Итог — выше и в Summary.'
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

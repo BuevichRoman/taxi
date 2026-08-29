@@ -1,0 +1,146 @@
+.breaks-confirm {
+  max-width: 340px;
+
+  &_text {
+    margin: 0 0 16px;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  &_actions {
+    display: flex;
+    gap: 12px;
+
+    > * {
+      flex: 1;
+    }
+  }
+}
+
+.breaks {
+  background: #FFFFFF;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border-left: 4px solid #4CAF50;
+
+  &--on-break {
+    border-left-color: #FF9800;
+  }
+
+  &_state {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  &_state-label {
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  &_state-since {
+    font-size: 13px;
+    color: #757575;
+    text-align: right;
+  }
+
+  &_totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 8px;
+
+    > div {
+      flex: 1 1 30%;
+    }
+
+    dt {
+      font-size: 12px;
+      color: #757575;
+      margin-bottom: 2px;
+    }
+
+    dd {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+  }
+
+  &_plan {
+    font-size: 12px;
+    color: #757575;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #EEEEEE;
+  }
+
+  &_summary {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+
+    th {
+      font-size: 12px;
+      color: #757575;
+      font-weight: 400;
+      text-align: right;
+      padding-bottom: 4px;
+    }
+
+    td {
+      padding: 3px 0;
+      text-align: right;
+      white-space: nowrap;
+
+      &:first-child {
+        text-align: left;
+        color: #757575;
+        white-space: normal;
+      }
+    }
+
+    tbody tr:last-child td {
+      font-weight: 600;
+      border-top: 1px solid #EEEEEE;
+      padding-top: 6px;
+    }
+  }
+
+  &_list {
+    margin-top: 8px;
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+  }
+
+  &_list-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #757575;
+    margin-bottom: 4px;
+  }
+
+  &_list-empty {
+    font-size: 13px;
+    color: #9E9E9E;
+  }
+
+  &_item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 3px 0;
+  }
+
+  &_item-duration {
+    color: #757575;
+  }
+}

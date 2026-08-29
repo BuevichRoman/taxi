@@ -249,13 +249,21 @@ export const emailRegex = /^(([^<>()\[\]\.,;:\s@\"]+(\.[^<>()\[\]\.,;:\s@\"]+)*)
 
 const DISTANCE_COEFFICIENT = 1.5
 
-export const dateFormat = 'YYYY-MM-DD HH:mm:ssZ'
-// export const dateShowFormat = 'YYYY-MM-DD HH:mm'
-export const dateShowFormat = 'HH:mm DD-MM'
-export const dateFormatDate = 'DD-MM'
-// export const dateFormatDate = 'YYYY-MM-DD'
-export const dateFormatTime = 'HH:mm:ss'
-export const dateFormatTimeShort = 'HH:mm'
+import {
+  dateFormat,
+  dateShowFormat,
+  dateFormatDate,
+  dateFormatTime,
+  dateFormatTimeShort,
+} from './dateFormats'
+
+export {
+  dateFormat,
+  dateShowFormat,
+  dateFormatDate,
+  dateFormatTime,
+  dateFormatTimeShort,
+}
 
 export enum EPaymentType {
   Customer,

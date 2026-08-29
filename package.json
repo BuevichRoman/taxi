@@ -3,7 +3,6 @@
     "version": "0.1.20",
     "private": true,
     "dependencies": {
-        "-": "0.0.1",
         "@babel/core": "^7.26.0",
         "@emotion/react": "^11.14.0",
         "@emotion/styled": "^11.14.0",
@@ -113,6 +112,10 @@
         "build": "run-script-os",
         "build:default": "set NODE_OPTIONS=--openssl-legacy-provider && node scripts/build.js",
         "build:nix": "NODE_OPTIONS=--openssl-legacy-provider node scripts/build.js",
+        "test": "node scripts/test.js",
+        "e2e": "run-script-os",
+        "e2e:default": "set REACT_APP_SERVER_URL=http://localhost:4173 && set CI=false && npm run build && playwright test",
+        "e2e:nix": "REACT_APP_SERVER_URL=http://localhost:4173 CI=false npm run build && playwright test",
         "prepare-build": "npm version patch && node pre-build.js",
         "lint-fix": "eslint src/**/*.{ts,tsx} --fix"
     },
@@ -149,7 +152,7 @@
         ],
         "testEnvironment": "jest-environment-jsdom-fourteen",
         "transform": {
-            "^.+\\.(js|jsx|ts|tsx)$": "<rootDir>/node_modules/babel-jest",
+            "^.+\\.(js|jsx|ts|tsx)$": "<rootDir>/config/jest/babelTransform.js",
             "^.+\\.css$": "<rootDir>/config/jest/cssTransform.js",
             "^(?!.*\\.(js|jsx|ts|tsx|css|json)$)": "<rootDir>/config/jest/fileTransform.js"
         },
@@ -184,6 +187,7 @@
         "@babel/preset-env": "^7.26.9",
         "@babel/preset-react": "^7.10.1",
         "@babel/preset-typescript": "^7.16.7",
+        "@playwright/test": "^1.62.1",
         "@types/file-saver": "^2.0.5",
         "@types/glidejs__glide": "^3.4.1",
         "@types/jsoneditor": "^9.5.1",

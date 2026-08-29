@@ -128,6 +128,11 @@ export interface IBookingCoordinates extends IBookingCoordinatesLatitude, IBooki
 
 export interface ICarOptions {
   performers_price: number
+  /**
+   * Ход выполнения: режим и фактические перерывы. Пишет няня действием
+   * `edit`, читают и няня, и заказчик
+   */
+  c_execution?: ICarExecution
 }
 
 export enum EDriverResponseModes {
@@ -242,6 +247,17 @@ export interface IOptions {
     },
     calculationType?: string
   }
+  /**
+   * Плановая смета: предполагаемые перерывы и показатели времени.
+   * Отсутствует у заказов, созданных до включения функционала.
+   * Факт лежит отдельно, в `c_options.c_execution` няни
+   */
+  b_execution?: IOrderEstimate
+  /**
+   * Предполагаемое окончание заказа: начало плюс число часов, названное
+   * заказчиком. Своего поля под длительность в схеме заказа нет
+   */
+  b_end_datetime?: string
 }
 
 export enum EOrderProfitRank {
@@ -253,6 +269,85 @@ export enum EOrderProfitRank {
 export interface IOrderEstimation {
   profit?: number,
   profitRank?: EOrderProfitRank,
+}
+
+/** Плановый перерыв, заданный при создании заказа */
+export interface IPlannedBreak {
+  started: string
+  ended: string
+}
+
+/** Фактический перерыв. У активного перерыва ended равен null */
+export interface IActualBreak {
+  id: string
+  started: string
+  ended: string | null
+  /**
+   * Показывать ли перерыв в списках и в истории.
+   * Сервер скрывает слишком короткие интервалы, но всё равно учитывает их
+   * в суммах и в расчёте стоимости
+   */
+  display: boolean
+}
+
+interface IExecutionTotals {
+  /** Общее время: от начала до окончания либо до server_time */
+  total_seconds: number
+  /** Рабочее время: общее время за вычетом перерывов */
+  work_seconds: number
+  /** Суммарная длительность всех перерывов, включая скрытые */
+  break_seconds: number
+  /** Оплачиваемое время после округления вверх до минуты. Из него цена */
+  billable_work_seconds: number
+}
+
+/** Плановая смета. После начала заказа не изменяется */
+export type IExecutionEstimate = IExecutionTotals & {
+  started: string
+  ended: string
+  breaks: IPlannedBreak[]
+}
+
+/** Фактические показатели */
+export type IExecutionActual = IExecutionTotals & {
+  started: string | null
+  ended: string | null
+  breaks: IActualBreak[]
+}
+
+/**
+ * Плановая смета заказа. Лежит в `b_options.b_execution`, пишет её заказчик
+ * при создании заказа: произвольные поля заказа допустимы только внутри
+ * `b_options` и только из списка `b_options_valid_keys`
+ */
+export interface IOrderEstimate {
+  schema_version: number
+  estimate: IExecutionEstimate | null
+}
+
+/**
+ * Ход выполнения со стороны няни. Лежит в `c_options.c_execution` — своём
+ * поле исполнителя по заказу.
+ *
+ * В `b_options` это не положить: метод `edit` собирает список разрешённых
+ * полей раздельно, и у исполнителя там стоит только `c_options`
+ */
+export interface ICarExecution {
+  schema_version: number
+  /** Текущий режим. null до начала работы и после завершения заказа */
+  mode: 'work' | 'break' | null
+  actual: IExecutionActual
+}
+
+/**
+ * План и факт, сведённые вместе. Хранятся раздельно, но экранам нужны
+ * одновременно — сводит `getExecution` из `tools/order`
+ */
+export interface IOrderExecution {
+  schema_version: number
+  mode: 'work' | 'break' | null
+  estimate: IExecutionEstimate | null
+  actual: IExecutionActual
 }
 
 export interface IOrder
@@ -345,6 +440,11 @@ export interface IOrder
       created: Moment
     }
   }
+  /**
+   * Время сервера на момент ответа. Если пришло — таймеры перерывов идут
+   * от него (ТЗ п. 4). Боевой API его не отдаёт, поэтому необязательное
+   */
+  server_time?: string
   b_attempts?: Array<{
     /** Идентификатор водителя */
     u_id: string,

@@ -5,6 +5,9 @@ import PageSection from '../../components/PageSection'
 import Button from '../../components/Button'
 import Input from '../../components/Input'
 import { addHiddenOrder } from '../../tools/utils'
+import { getExecution } from '../../tools/order'
+import { applyBreakAction, breakActionError, finishExecution } from '../../tools/execution'
+import { serverNow } from '../../tools/serverClock'
 import * as API from '../../API'
 import { t, TRANSLATION } from '../../localization'
 import ClientInfo from '../../components/order/ClientInfo'
@@ -17,6 +20,9 @@ import images from '../../constants/images'
 import { useForm } from 'react-hook-form'
 import './styles.scss'
 import ChatToggler from '../../components/Chat/Toggler'
+import Breaks from '../../components/order/Breaks'
+import BreakConfirmModal from '../../components/order/Breaks/ConfirmModal'
+import { tBreak } from '../../components/order/Breaks/texts'
 import { orderSelectors, orderActionCreators } from '../../state/order'
 import { modalsActionCreators } from '../../state/modals'
 import { userSelectors } from '../../state/user'
@@ -71,6 +77,8 @@ const Order: React.FC<IProps> = ({
 }) => {
   const [isFromAddressShort, setIsFromAddressShort] = useState(true)
   const [isToAddressShort, setIsToAddressShort] = useState(true)
+  /** Какое подтверждение перерыва открыто: начало, окончание или ничего */
+  const [breakConfirm, setBreakConfirm] = useState<'start' | 'end' | null>(null)
 
   const id = useParams().id as string
   const navigate = useNavigate()
@@ -145,8 +153,18 @@ const Order: React.FC<IProps> = ({
       return
     }
 
-    
-    API.setOrderState(id, EBookingDriverState.Finished)
+    // Завершать во время перерыва можно (ТЗ п. 12): сначала закрываем
+    // открытый перерыв и снимаем режим, потом завершаем сам заказ. Порядок
+    // важен — после завершения edit заказа исполнителю уже недоступен
+    const finished = finishExecution(
+      driver.c_options?.c_execution,
+      driver.c_started ? String(driver.c_started) : null,
+      serverNow(),
+    )
+
+    API.saveExecution(id, finished)
+      .catch(error => console.error(error))
+      .then(() => API.setOrderState(id, EBookingDriverState.Finished))
       .then(() => {
         getOrder(id)
         setMessageModal({
@@ -162,6 +180,54 @@ const Order: React.FC<IProps> = ({
           isOpen: true, 
           status: EStatuses.Fail, 
           message: t(TRANSLATION.ERROR) 
+        })
+      })
+  }
+
+  /** Проверка допустимости действия перед отправкой (ТЗ п. 14) */
+  const checkBreakAction = (isStart: boolean): string | null =>
+    breakActionError(getExecution(order, driver?.u_id), isStart)
+
+  /**
+   * Начало и окончание перерыва. Заказ остаётся выполняющимся, меняется
+   * только внутренний режим (ТЗ п. 7)
+   */
+  const onBreakConfirmed = () => {
+    // Подтверждение смонтировано всегда, видимостью управляет оверлей:
+    // без этой проверки «Да» при закрытом окне отправляло завершение перерыва
+    if (breakConfirm === null) return
+
+    const isStart = breakConfirm === 'start'
+    setBreakConfirm(null)
+
+    const error = checkBreakAction(isStart)
+    if (error) {
+      setMessageModal({ isOpen: true, status: EStatuses.Fail, message: tBreak(error) })
+      return
+    }
+
+    // Блок считаем сами: сервер ничего не пересчитывает, для него это
+    // просто JSON. Момент начала работы берём из c_started — его пишет
+    // бэкенд действием set_start_state, дублировать не нужно
+    const next = applyBreakAction(
+      driver?.c_options?.c_execution,
+      isStart,
+      driver?.c_started ? String(driver.c_started) : null,
+      serverNow(),
+    )
+
+    API.saveExecution(id, next)
+      .then(() => getOrder(id))
+      .catch((error: { code?: string, message?: string }) => {
+        console.error(error)
+        // Своих кодов отказа у сервера нет: перерывы он не проверяет, а
+        // отвечает общими ошибками платформы. Допустимость действия
+        // проверяет breakActionError до отправки, сюда попадают только
+        // отказы записи — их показываем общим текстом
+        setMessageModal({
+          isOpen: true,
+          status: EStatuses.Fail,
+          message: t(TRANSLATION.ERROR),
         })
       })
   }
@@ -269,6 +335,22 @@ const Order: React.FC<IProps> = ({
       />
     </>
     if (driver?.c_state === EBookingDriverState.Started) return <>
+      {driver?.c_options?.c_execution?.mode === 'break' ?
+        <Button
+          text={tBreak(TRANSLATION.BREAK_END)}
+          className="order_take-order-btn"
+          onClick={() => setBreakConfirm('end')}
+          label={message}
+          status={status}
+        /> :
+        <Button
+          text={tBreak(TRANSLATION.BREAK_START)}
+          className="order_break-btn"
+          onClick={() => setBreakConfirm('start')}
+          label={message}
+          status={status}
+        />
+      }
       <Button
         text={t(TRANSLATION.CLOSE_DRIVE)}
         className="order_take-order-btn"
@@ -303,6 +385,16 @@ const Order: React.FC<IProps> = ({
         (
           <form onSubmit={formHandleSubmit(handleSubmit)}>
             <ClientInfo order={order} client={client} user={user}/>
+            <Breaks order={order}/>
+            <BreakConfirmModal
+              isOpen={breakConfirm !== null}
+              text={tBreak(breakConfirm === 'end' ?
+                TRANSLATION.BREAK_END_CONFIRM :
+                TRANSLATION.BREAK_START_CONFIRM)}
+              status={status}
+              onConfirm={onBreakConfirmed}
+              onCancel={() => setBreakConfirm(null)}
+            />
             <div className="order__from-to colored">
               <div className='estimate-time'>
                 {t(TRANSLATION.ESTIMATE_TIME)}:&nbsp;

@@ -1,0 +1,16 @@
+{
+  "name": "Сценарии в браузере",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "postCreateCommand": "npm ci && npm ci --prefix e2e/mock-server && npx playwright install --with-deps chromium",
+  "forwardPorts": [4173, 4010, 9323],
+  "portsAttributes": {
+    "4173": { "label": "Приложение и API" },
+    "4010": { "label": "Мок" },
+    "9323": { "label": "Отчёт Playwright" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-playwright.playwright"]
+    }
+  }
+}
