@@ -45,6 +45,11 @@ jobs:
       - run: npm ci
       - name: Зависимости мока
         run: npm ci --prefix e2e/mock-server || npm install --prefix e2e/mock-server
+      # Сценарии читаются до сборки: опечатка в файле видна за секунды,
+      # а не через две минуты установки браузера и сборки приложения
+      - name: Сценарии читаются
+        run: npx playwright test --list
+
       - run: npx playwright install --with-deps chromium
       # Та же команда, что и локально: сборка против мока + прогон сценариев.
       # Собственный CI=false внутри скрипта касается только сборки —
