@@ -108,6 +108,36 @@ const _cancelDrive = (
 }
 export const cancelDrive = apiMethod<typeof _cancelDrive>(_cancelDrive)
 
+/**
+ * Цена заказа от сервера (шаблон nanny_pricing, action final): своих копий
+ * формулы у приложения нет. Без durationMin — итог по факту завершения,
+ * с ним — цена по снимку заказа за заданные минуты.
+ */
+const _getOrderPrice = (
+  { formData }: IApiMethodArguments,
+  id: IOrder['b_id'],
+  durationMin?: number,
+): Promise<{ price: string, formula: string, options: Record<string, any> }> => {
+  addToFormData(formData, {
+    is_var: 1,
+    s_t_data: JSON.stringify({
+      action: 'final',
+      b_id: Number(id),
+      ...(durationMin !== undefined ? { duration_min: durationMin } : {}),
+    }),
+  })
+
+  return axios.post(`${Config.API_URL}/script/template/nanny_pricing`, formData)
+    .then(res => {
+      const price = res.data?.data?.price
+      if (res.data?.status !== 'success' || price === undefined || price === null) {
+        throw new Error(res.data?.message || 'price unavailable')
+      }
+      return { ...res.data.data, price: String(price) }
+    })
+}
+export const getOrderPrice = apiMethod<typeof _getOrderPrice>(_getOrderPrice)
+
 export const getOrders: <TType extends EOrderTypes>(
   type?: TType,
   filter?: TType extends EOrderTypes.Ready ? {

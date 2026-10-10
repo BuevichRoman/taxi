@@ -74,6 +74,8 @@ export const bookingBase = (id: string, startIso: string) => ({
             formula:
                 '(base_price+distance*price_per_km+duration*price_per_minute)' +
                 '*time_ratio*car_class_ratio+options_sum+submit_price',
+            // Цену в заказ пишет сервер (шаблон nanny_pricing) при создании
+            price: '200',
             options: {
                 base_price: 200,
                 distance: 0,

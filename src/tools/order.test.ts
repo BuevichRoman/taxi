@@ -5,7 +5,7 @@
  * `b_options` заказом, факт — в `c_options` няни. Экранам нужны оба сразу.
  */
 
-import { getExecution } from './order'
+import { calculateFinalPrice, getExecution } from './order'
 import { ICarExecution, IOrder } from '../types/types'
 
 const estimate = {
@@ -106,5 +106,22 @@ describe('getExecution', () => {
     )
 
     expect(merged?.mode).toBe('break')
+  })
+})
+
+describe('calculateFinalPrice — цена от сервера, своей формулы нет', () => {
+  const withModel = (pricingModel: unknown) => ({ b_options: { pricingModel } }) as unknown as IOrder
+
+  it('отдаёт цену, которую сервер записал в заказ, не пересчитывая', () => {
+    // Формула нарочно не сходится с ценой: приложение её не вычисляет
+    expect(calculateFinalPrice(withModel({ formula: 'base_price*100', price: '180', options: { base_price: 200 } }))).toBe('180')
+    expect(calculateFinalPrice(withModel({ formula: 'x', price: 0 }))).toBe('0')
+  })
+
+  it('нет заказа, формулы или цены — err; формула «-» — прочерк', () => {
+    expect(calculateFinalPrice(null)).toBe('err')
+    expect(calculateFinalPrice(withModel(undefined))).toBe('err')
+    expect(calculateFinalPrice(withModel({ formula: 'x' }))).toBe('err')
+    expect(calculateFinalPrice(withModel({ formula: '-' }))).toBe('-')
   })
 })

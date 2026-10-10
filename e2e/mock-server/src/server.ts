@@ -307,6 +307,26 @@ api.post('/drive', form, (req, res) => {
 })
 
 /** Рейсы к перерывам отношения не имеют, отвечаем пустым списком. */
+/**
+ * Шаблон цены nanny_pricing, action final. Расчёт живёт на боевом сервере;
+ * мок отдаёт снимок цены заказа, подставив длительность, если её спросили.
+ */
+api.post('/script/template/nanny_pricing', form, (req, res) => {
+    const input = JSON.parse(String((req.body as Record<string, unknown>)['s_t_data'] ?? '{}'))
+    const order = orders.get(String(input.b_id))
+    if (input.action !== 'final' || !order) {
+        res.json({ status: 'error', message: 'order not found' })
+        return
+    }
+    const pm = (bookingPayload(order, now()) as any).b_options.pricingModel
+    // Мок не считает: за любые минуты — плановая цена плюс 5 за минуту, как в формуле
+    const minutes = input.duration_min !== undefined ? Number(input.duration_min) : 0
+    res.json({
+        status: 'success',
+        data: { ...pm, price: String(Number(pm.price) + 5 * minutes), options: { ...pm.options, duration: minutes } },
+    })
+})
+
 api.post('/trip/get', form, (_req, res) => {
     res.json({ status: 'success', code: '200', data: { trip: [] } })
 })

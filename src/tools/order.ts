@@ -77,9 +77,6 @@ export function updateCompletedOrderDuration(order: IOrder): IOrder {
         },
       },
     }
-    const newPrice = calculateFinalPrice(order)
-    if (typeof newPrice === 'number')
-      order.b_options!.pricingModel!.price = newPrice
   }
   return order
 }
@@ -121,39 +118,23 @@ export const calculateFinalPriceFormula = (order: IOrder | null) => {
   return formula
 }
 
+/**
+ * Цена из заказа — её записал сервер при создании (шаблон nanny_pricing).
+ * Своей формулы у приложения нет: итог по факту и цену за другие минуты
+ * даёт сервер, см. useOrderPrice в tools/orderPrice.
+ */
 export const calculateFinalPrice = (order: IOrder | null) => {
   if (!order) {
     return 'err'
   }
-  if(!order.b_options?.pricingModel?.formula) {
+  const model = order.b_options?.pricingModel
+  if (!model?.formula) {
     return 'err'
   }
-  if(order.b_options?.pricingModel?.formula === '-') {
+  if (model.formula === '-') {
     return '-'
   }
-  let formula  = order.b_options?.pricingModel?.formula
-  let options = order.b_options?.pricingModel?.options || {}
-
-  // pick up submitPrice from b_options
-  options = {
-    ...options,
-    ...{
-      submit_rice: order.b_options?.submitPrice,
-    },
-  }
-  if (!formula || formula === 'err') {
-    return 'err'
-  }
-  Object.entries(options).forEach(([key, value]) => {
-    const placeholder = `${key}`
-    formula = formula.replace(new RegExp(placeholder, 'g'), value?.toString() || '0')
-  })
-  console.log('FINAL FORMULA', formula, '=', eval(formula), ' ~ ', Math.trunc(eval(formula)))
-  try {
-    return Math.trunc(eval(formula)).toString()
-  } catch (e) {
-    return 'err, status: ' + e
-  }
+  return model.price === undefined || model.price === null ? 'err' : String(model.price)
 }
 
 export function candidateMode(order?: IOrder): boolean {
