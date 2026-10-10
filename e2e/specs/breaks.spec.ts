@@ -74,6 +74,9 @@ test('заказ завершён во время перерыва: переры
 
   await advanceClock(page, 15 * 60)
 
+  // Цену оплачиваемого времени приложение не считает само — спрашивает шаблон
+  const priceAsked = page.waitForRequest(r => r.url().includes('/script/template/nanny_pricing'))
+
   // Во время перерыва кнопок с этим классом две: «Продолжить работу»
   // и завершение заказа. Нужна вторая
   await page.locator(endBreak).nth(1).click()
@@ -81,4 +84,11 @@ test('заказ завершён во время перерыва: переры
   await expect(page.locator('.breaks_state-label')).toHaveText('Заказ завершён')
   await expect(page.locator('.breaks_summary')).toBeVisible()
   await expect(page.locator('.breaks_item')).toHaveCount(1)
+
+  // Тело — multipart/form-data, поле s_t_data
+  const body = (await priceAsked).postData() ?? ''
+  const asked = JSON.parse(body.match(/name="s_t_data"\r\n\r\n(.*?)\r\n/)?.[1] ?? '{}')
+  expect(asked).toMatchObject({ action: 'final', b_id: Number(DEMO_ORDER_ID) })
+  expect(typeof asked.duration_min).toBe('number')
+  await expect(page.locator('.breaks_summary tbody tr').nth(3).locator('td').nth(2)).toHaveText(/^\d+$/)
 })

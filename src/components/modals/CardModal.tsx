@@ -25,11 +25,11 @@ import {
   formatCurrency,
 } from '../../tools/utils'
 import {
-  calculateFinalPrice,
   calculateFinalPriceFormula,
   candidateMode,
   getExecution,
 } from '../../tools/order'
+import { useOrderPrice } from '../../tools/orderPrice'
 import {
   applyBreakAction,
   breakActionError,
@@ -520,7 +520,7 @@ function CardModalContent({
     // 'reccomended': return '#00A72F'\
     return 'rgba(0, 0, 0, 0.25)'
   }
-  const price = calculateFinalPrice(order)
+  const price = useOrderPrice(order)
 
   const _type = order?.b_payment_way === EPaymentWays.Credit ?
     TRANSLATION.CARD :

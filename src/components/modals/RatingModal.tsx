@@ -3,10 +3,8 @@ import { connect, ConnectedProps } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import Rating from 'react-rating'
 import moment from 'moment'
-import {
-  calculateFinalPrice,
-  calculateFinalPriceFormula,
-} from '../../tools/order'
+import { calculateFinalPriceFormula } from '../../tools/order'
+import { useOrderPrice } from '../../tools/orderPrice'
 import { useSimpleSelector } from '../../tools/hooks'
 import images from '../../constants/images'
 import { CURRENCY } from '../../siteConstants'
@@ -77,7 +75,7 @@ function RatingModal({
     setRatingModal({ isOpen: false })
   }
 
-  const [finalPriceFormula, finalPrice] = useMemo(() => {
+  const [finalPriceFormula] = useMemo(() => {
     if (order?.b_options?.pricingModel) {
       const start_moment = moment(order.b_start_datetime)
       const end_moment = moment(order.b_completed)
@@ -98,13 +96,12 @@ function RatingModal({
         },
       }
 
-      return [
-        calculateFinalPriceFormula(orderWithUpdatedOptions),
-        calculateFinalPrice(orderWithUpdatedOptions),
-      ]
+      return [calculateFinalPriceFormula(orderWithUpdatedOptions)]
     }
-    return ['err', 0]
+    return ['err']
   }, [order])
+  // Итог по факту считает сервер
+  const finalPrice = useOrderPrice(order)
 
   return (
     <Overlay

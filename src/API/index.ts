@@ -56,6 +56,7 @@ export {
 export {
   postDrive,
   cancelDrive,
+  getOrderPrice,
   getOrders,
   getOrder,
   editOrder,

@@ -4,7 +4,8 @@ import { IActualBreak, IOrder } from '../../../types/types'
 import { tBreak } from './texts'
 import { TRANSLATION } from '../../../localization'
 import { dateFormat } from '../../../tools/utils'
-import { calculateFinalPrice, getExecution } from '../../../tools/order'
+import { getExecution } from '../../../tools/order'
+import { OrderPrice } from '../../../tools/orderPrice'
 import { serverNow } from '../../../tools/serverClock'
 import './styles.scss'
 
@@ -98,25 +99,12 @@ const Breaks: React.FC<IProps> = ({ order }) => {
   const visibleBreaks = actual.breaks.filter(item => item.display && item.ended !== null)
 
   /**
-   * Стоимость по оплачиваемому времени. Считается тем же механизмом, что и
-   * везде в приложении (ТЗ п. 11: единый алгоритм расчёта), — подставляем в
-   * модель длительность в минутах и отдаём в существующую формулу
+   * Стоимость по оплачиваемому времени (ТЗ п. 11: единый алгоритм расчёта).
+   * Считает сервер по снимку цены заказа, длительность — в минутах
    */
-  const priceFor = (billableSeconds: number): string => {
-    const model = order.b_options?.pricingModel
-    if (!model) return '—'
-
-    return calculateFinalPrice({
-      ...order,
-      b_options: {
-        ...order.b_options,
-        pricingModel: {
-          ...model,
-          options: { ...model.options, duration: Math.ceil(billableSeconds / 60) },
-        },
-      },
-    }).toString()
-  }
+  const priceFor = (billableSeconds: number) => order.b_options?.pricingModel ?
+    <OrderPrice order={order} durationMin={Math.ceil(billableSeconds / 60)} /> :
+    '—'
 
   /** Отклонение факта от плана со знаком */
   const deviation = (fact: number, plan: number): string => {
