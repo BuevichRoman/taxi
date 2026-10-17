@@ -181,55 +181,59 @@ export async function evidenceStep(
       // the compositor returns an all-black PNG, so the artifact is inspected
       // by pixel content after the run rather than treating a successful call
       // as proof of a valid screenshot.
+      // Capture can succeed at protocol level while Chromium returns an all-black
+      // PNG (~5.8 KB for this 1280x720 viewport). Retry using independent paths;
+      // known good app screenshots are substantially larger. Never replace a bad
+      // image with a placeholder: if every attempt fails, attach the final real
+      // capture and explicit diagnostics.
       const captureModes = [
+        'playwright-page-screenshot',
+        'playwright-body-screenshot',
+        'cdp-fromSurface-true',
         'cdp-fromSurface-false',
         'cdp-default-options',
-        'cdp-forced-repaint-fromSurface-true',
-        'playwright-page-screenshot',
       ]
-      // Step numbers in MAN-N scenarios are not guaranteed to be 1..4.
-      // Rotate through the four capture modes explicitly so every run tests them.
-      const captureMode = captureModes[(Math.abs(number) - 1) % captureModes.length]
-      let screenshot: Buffer
+      let captureMode = captureModes[0]
+      let screenshot = Buffer.alloc(0)
       let captureError: string | null = null
-      try {
-        if (captureMode === 'playwright-page-screenshot') {
-          screenshot = await page.screenshot({ type: 'png', animations: 'disabled' })
-        } else {
-          const session = await page.context().newCDPSession(page)
-          try {
-            if (captureMode === 'cdp-forced-repaint-fromSurface-true') {
-              // Invalidate layout/paint without changing the visible design, then
-              // wait for two compositor frames before capturing.
-              await page.evaluate(async () => {
-                const root = document.querySelector('#root') as HTMLElement | null
-                if (root) {
-                  void root.getBoundingClientRect()
-                  root.style.setProperty('will-change', 'transform')
-                  void root.offsetHeight
-                  root.style.removeProperty('will-change')
-                }
-                window.dispatchEvent(new Event('resize'))
-                await new Promise<void>((resolve) => requestAnimationFrame(() =>
-                  requestAnimationFrame(() => resolve())
-                ))
-              })
-            }
-            const options = captureMode === 'cdp-fromSurface-false'
-              ? { format: 'png' as const, fromSurface: false, captureBeyondViewport: false }
-              : captureMode === 'cdp-default-options'
-                ? { format: 'png' as const }
-                : { format: 'png' as const, fromSurface: true, captureBeyondViewport: false }
-            const result = await session.send('Page.captureScreenshot', options)
-            screenshot = Buffer.from(result.data, 'base64')
-          } finally {
-            await session.detach().catch(() => {})
-          }
+      const captureAttempts: Array<{ mode: string; bytes: number; error: string | null }> = []
+      const captureWithMode = async (mode: string): Promise<Buffer> => {
+        if (mode === 'playwright-page-screenshot') {
+          return page.screenshot({ type: 'png', animations: 'disabled' })
         }
-      } catch (error) {
-        captureError = error instanceof Error ? error.message : String(error)
-        screenshot = Buffer.alloc(0)
+        if (mode === 'playwright-body-screenshot') {
+          return page.locator('body').screenshot({ type: 'png', animations: 'disabled' })
+        }
+        const session = await page.context().newCDPSession(page)
+        try {
+          const options = mode === 'cdp-fromSurface-false'
+            ? { format: 'png' as const, fromSurface: false, captureBeyondViewport: false }
+            : mode === 'cdp-default-options'
+              ? { format: 'png' as const }
+              : { format: 'png' as const, fromSurface: true, captureBeyondViewport: false }
+          const result = await session.send('Page.captureScreenshot', options)
+          return Buffer.from(result.data, 'base64')
+        } finally {
+          await session.detach().catch(() => {})
+        }
       }
+      for (const mode of captureModes) {
+        captureMode = mode
+        try {
+          const candidate = await captureWithMode(mode)
+          captureAttempts.push({ mode, bytes: candidate.length, error: null })
+          screenshot = candidate
+          captureError = null
+          // In this report a black 1280x720 PNG is about 5.8 KB; valid screens
+          // have been >70 KB. Use a conservative threshold and try another path.
+          if (candidate.length >= 20000) break
+          captureError = `Screenshot looks suspiciously small (${candidate.length} bytes); trying next capture mode`
+        } catch (error) {
+          captureError = error instanceof Error ? error.message : String(error)
+          captureAttempts.push({ mode, bytes: 0, error: captureError })
+        }
+      }
+      const captureLooksValid = screenshot.length >= 20000
       const captureDiagnostics = await page.evaluate(() => {
         const root = document.querySelector('#root')
         const body = document.body
@@ -262,6 +266,8 @@ export async function evidenceStep(
           captureMode,
           captureBytes: screenshot.length,
           captureError,
+          captureLooksValid,
+          captureAttempts,
           ...visualState,
           captureDiagnostics,
         }, null, 2)),
@@ -272,7 +278,7 @@ export async function evidenceStep(
         contentType: 'image/png',
       })
       await testInfo.attach(`step-${number}-visual-state.json`, {
-        body: Buffer.from(JSON.stringify({ ...visualState, captureMode }, null, 2)),
+        body: Buffer.from(JSON.stringify({ ...visualState, captureMode, captureLooksValid, captureAttempts }, null, 2)),
         contentType: 'application/json',
       })
     } catch {
