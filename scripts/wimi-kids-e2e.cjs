@@ -35,6 +35,13 @@ if (!multibotRoot) {
   }
 }
 
+// Persist the external PHP result for the HTML reporter. This avoids relying on
+// environment propagation through npm/run-script-os child processes.
+fs.writeFileSync(
+  path.join(repoRoot, 'e2e', 'wimi-man10-result.json'),
+  JSON.stringify({ status: man10Status, actual: man10Actual }, null, 2) + '\\n',
+);
+
 console.log('MAN-10:', man10Status);
 if (man10Actual) console.log(man10Actual);
 
