@@ -140,7 +140,22 @@ export async function evidenceStep(
     }
 
     try {
-      const screenshot = await page.screenshot({ animations: 'disabled' })
+      // Не сохраняем снимок в состоянии загрузки: ждём стабилизации DOM и картинок,
+      // но не блокируем отчёт, если конкретный экран не становится idle.
+      await page.waitForLoadState('domcontentloaded', { timeout: 1500 }).catch(() => {})
+      await page.locator('body').waitFor({ state: 'visible', timeout: 1500 }).catch(() => {})
+      await page.waitForTimeout(350)
+      await page.evaluate(async () => {
+        if (document.fonts?.ready) await Promise.race([
+          document.fonts.ready,
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ])
+        await Promise.race([
+          Promise.all(Array.from(document.images).map((img) => img.decode().catch(() => undefined))),
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ])
+      }).catch(() => {})
+      const screenshot = await page.screenshot({ animations: 'disabled', timeout: 5000 })
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
         contentType: 'image/png',
