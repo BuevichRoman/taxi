@@ -13,6 +13,16 @@ const statusLabel = (status) => ({
   skipped: 'BLOCKED',
 }[status] || 'BLOCKED');
 
+const isLikelyBlankScreenshot = (attachment) => {
+  if (!attachment?.contentType?.startsWith('image/png') || !attachment.body?.startsWith('data:image/png;base64,')) return false;
+  try {
+    const bytes = Buffer.from(attachment.body.slice('data:image/png;base64,'.length), 'base64');
+    // The confirmed blank frames were 1280×720 PNGs of ~5.8 KB; valid captures
+    // from this UI are tens of KB. Never render the known blank-frame signature.
+    return bytes.length < 12 * 1024;
+  } catch { return false; }
+};
+
 const mimeType = (filePath) => {
   const ext = path.extname(filePath || '').toLowerCase();
   if (ext === '.png') return 'image/png';
@@ -87,9 +97,9 @@ class WimiHtmlReporter {
     const timezone = 'Europe/Madrid';
     const localDate = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'medium', timeZone: timezone }).format(finishedAt);
 
-    const image = (attachment, alt, label) => attachment
+    const image = (attachment, alt, label) => attachment && !isLikelyBlankScreenshot(attachment)
       ? `<button class="image-open" type="button" data-image="${attachment.body}" data-alt="${escapeHtml(alt)}"><img alt="${escapeHtml(alt)}" src="${attachment.body}"><span>${escapeHtml(label)}</span></button>`
-      : '<p class="muted">Скриншот шага не получен.</p>';
+      : '<p class="muted screenshot-warning">Скриншот не показан: Chromium вернул чёрный или пустой кадр. Это отмечено как проблема захвата, а не как доказательство прохождения.</p>';
 
     const testsHtml = this.results.map((item) => {
       const steps = item.stepDetails.length
@@ -118,7 +128,7 @@ class WimiHtmlReporter {
       const manual = relatedCases[0] || manualCases.find((candidate) => candidate.id === item.id);
       return {
         item, step,
-        screenshot: item.attachments.find((a) => a.name === 'step-' + step.number + '-screenshot.png'),
+        screenshot: item.attachments.find((a) => a.name === 'step-' + step.number + '-screenshot.png' && !isLikelyBlankScreenshot(a)),
         manual,
         group: manual ? manual.id + ' — ' + manual.title : (item.id || item.title),
         groupIds: relatedCases.length ? relatedCases.map((candidate) => candidate.id) : [manual?.id || item.id || item.title],
@@ -130,7 +140,7 @@ class WimiHtmlReporter {
     })).map(([id, value]) => [id, value])).values()];
     const slidesHtml = slideItems.map((entry, index) => '<article class="slide" data-slide="' + index + '" data-test-group="' + escapeHtml(entry.groupIds.join(',')) + '" hidden>' +
       '<header><strong>' + escapeHtml(entry.group) + '</strong><span>Шаг ' + entry.step.number + '</span></header>' +
-      (entry.screenshot ? '<img class="slide-image" alt="Скриншот шага ' + entry.step.number + '" src="' + entry.screenshot.body + '">' : '<div class="no-image">Скриншот не сохранён</div>') +
+      (entry.screenshot ? '<img class="slide-image" alt="Скриншот шага ' + entry.step.number + '" src="' + entry.screenshot.body + '">' : '<div class="no-image">Скриншот не получен или кадр чёрный — проверка захвата не пройдена</div>') +
       '<button class="comment-toggle" type="button" aria-expanded="false">Показать комментарий</button>' +
       '<div class="slide-comment" hidden><p><b>Тест:</b> ' + escapeHtml(entry.item.title) + '</p><p><b>Сценарий:</b> ' + escapeHtml(entry.group) + '</p><p><b>Действие:</b> ' + escapeHtml(entry.step.action) + '</p><p><b>Ожидаемо:</b> ' + escapeHtml(entry.step.expected) + '</p><p><b>Фактически:</b> ' + escapeHtml(entry.step.actual) + '</p><p><b>Статус:</b> ' + escapeHtml(entry.step.status) + ' · <b>Время:</b> ' + entry.step.elapsedMs + ' мс · <b>часы мока:</b> ' + escapeHtml(entry.step.simulatedTime || 'не получены') + '</p></div></article>').join('');
     const slideTestTable = '<section class="coverage"><h2>Тесты в этом прогоне</h2><table><thead><tr><th>Сценарий MAN</th><th>Тест Playwright</th><th>Статус</th></tr></thead><tbody>' +
