@@ -176,3 +176,71 @@ test('заказ завершён во время перерыва: переры
     },
   )
 })
+
+
+test('заказ без перерывов не показывает состояние и список перерывов', async ({ nannyPage: page }, testInfo) => {
+  await evidenceStep(
+    page, testInfo, 1,
+    'Открыть активный заказ без перерывов',
+    'Нет состояния перерыва и нет элементов завершённых перерывов.',
+    'Состояние перерыва отсутствует; список записей пуст.',
+    async () => {
+      await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
+      await expect(page.locator('.breaks_state-label')).toHaveCount(0)
+      await expect(page.locator('.breaks_item')).toHaveCount(0)
+      await expect(page.locator(startBreak)).toBeVisible()
+    },
+  )
+})
+
+test('во время активного перерыва нельзя начать второй перерыв', async ({ nannyPage: page }, testInfo) => {
+  await evidenceStep(
+    page, testInfo, 1,
+    'Начать первый перерыв',
+    'Показывается состояние «Перерыв», повторная кнопка начала отсутствует.',
+    'Первый перерыв активен; кнопка начала второго перерыва отсутствует.',
+    async () => {
+      await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
+      await page.locator(startBreak).click()
+      await page.locator(confirm).first().click()
+      await expect(page.locator('.breaks_state-label')).toHaveText('Перерыв')
+      await expect(page.locator(startBreak)).toHaveCount(0)
+      await expect(page.locator(endBreak).first()).toBeVisible()
+    },
+  )
+})
+
+test('два последовательных перерыва сохраняются отдельными записями', async ({ nannyPage: page }, testInfo) => {
+  await evidenceStep(
+    page, testInfo, 1,
+    'Выполнить первый короткий перерыв',
+    'После возобновления работы завершённый перерыв не отображается в списке, если короче порога видимости.',
+    'Работа возобновлена после первого короткого перерыва.',
+    async () => {
+      await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
+      await page.locator(startBreak).click()
+      await page.locator(confirm).first().click()
+      await advanceClock(page, 90)
+      await page.locator(endBreak).first().click()
+      await page.locator(confirm).first().click()
+      await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
+    },
+  )
+
+  await evidenceStep(
+    page, testInfo, 2,
+    'Выполнить второй короткий перерыв',
+    'После второго возобновления работа активна, оба коротких перерыва учтены в суммах.',
+    'Два перерыва завершены; состояние «Работа» и итоговые суммы доступны.',
+    async () => {
+      await page.locator(startBreak).click()
+      await page.locator(confirm).first().click()
+      await advanceClock(page, 90)
+      await page.locator(endBreak).first().click()
+      await page.locator(confirm).first().click()
+      await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
+      await expect(page.locator('.breaks_list-empty')).toBeVisible()
+      await expect(page.locator('.breaks_totals dd').nth(2)).not.toHaveText('0 сек')
+    },
+  )
+})
