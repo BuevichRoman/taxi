@@ -213,14 +213,14 @@ test('во время активного перерыва нельзя нача�
 test('два последовательных перерыва сохраняются отдельными записями', async ({ nannyPage: page }, testInfo) => {
   await evidenceStep(
     page, testInfo, 1,
-    'Выполнить первый короткий перерыв',
-    'После возобновления работы перерыв короче порога видимости 60 секунд и не отображается в списке.',
-    'Работа возобновлена после первого перерыва длительностью 30 секунд.',
+    'Выполнить первый перерыв длительностью больше порога отображения',
+    'После возобновления работы перерыв длительностью 90 секунд отображается отдельной записью.',
+    'Работа возобновлена после первого перерыва; в списке одна запись.',
     async () => {
       await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
       await page.locator(startBreak).click()
       await page.locator(confirm).first().click()
-      await advanceClock(page, 30)
+      await advanceClock(page, 90)
       await page.locator(endBreak).first().click()
       await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
@@ -229,17 +229,18 @@ test('два последовательных перерыва сохраняю�
 
   await evidenceStep(
     page, testInfo, 2,
-    'Выполнить второй короткий перерыв',
-    'После второго возобновления работа активна, оба коротких перерыва учтены в суммах.',
-    'Два перерыва завершены; состояние «Работа» и итоговые суммы доступны.',
+    'Выполнить второй перерыв длительностью больше порога отображения',
+    'После второго возобновления работа активна; оба перерыва отображаются как отдельные записи.',
+    'Два перерыва завершены; состояние «Работа» и две отдельные записи в списке.',
     async () => {
       await page.locator(startBreak).click()
       await page.locator(confirm).first().click()
-      await advanceClock(page, 30)
+      await advanceClock(page, 90)
       await page.locator(endBreak).first().click()
       await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
-      await expect(page.locator('.breaks_list-empty')).toBeVisible()
+      await expect(page.locator('.breaks_item')).toHaveCount(2)
+      await expect(page.locator('.breaks_list-header span').last()).toHaveText('2')
       await expect(page.locator('.breaks_totals dd').nth(2)).not.toHaveText('0 сек')
     },
   )
