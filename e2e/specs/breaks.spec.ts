@@ -214,13 +214,13 @@ test('два последовательных перерыва сохраняю�
   await evidenceStep(
     page, testInfo, 1,
     'Выполнить первый короткий перерыв',
-    'После возобновления работы завершённый перерыв не отображается в списке, если короче порога видимости.',
-    'Работа возобновлена после первого короткого перерыва.',
+    'После возобновления работы перерыв короче порога видимости 60 секунд и не отображается в списке.',
+    'Работа возобновлена после первого перерыва длительностью 30 секунд.',
     async () => {
       await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
       await page.locator(startBreak).click()
       await page.locator(confirm).first().click()
-      await advanceClock(page, 90)
+      await advanceClock(page, 30)
       await page.locator(endBreak).first().click()
       await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
@@ -235,7 +235,7 @@ test('два последовательных перерыва сохраняю�
     async () => {
       await page.locator(startBreak).click()
       await page.locator(confirm).first().click()
-      await advanceClock(page, 90)
+      await advanceClock(page, 30)
       await page.locator(endBreak).first().click()
       await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
