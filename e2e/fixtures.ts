@@ -142,20 +142,24 @@ export async function evidenceStep(
     try {
       // Не сохраняем снимок в состоянии загрузки: ждём стабилизации DOM и картинок,
       // но не блокируем отчёт, если конкретный экран не становится idle.
-      await page.waitForLoadState('domcontentloaded', { timeout: 1500 }).catch(() => {})
-      await page.locator('body').waitFor({ state: 'visible', timeout: 1500 }).catch(() => {})
-      await page.waitForTimeout(350)
+      await page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {})
+      await page.locator('body').waitFor({ state: 'visible', timeout: 3000 }).catch(() => {})
+      // SPA may have completed navigation before React finished rendering. Wait
+      // for a real app root child and two paint frames before capturing.
+      await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+      await page.waitForTimeout(1000)
       await page.evaluate(async () => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
         if (document.fonts?.ready) await Promise.race([
           document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 1000)),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
         ])
         await Promise.race([
           Promise.all(Array.from(document.images).map((img) => img.decode().catch(() => undefined))),
-          new Promise((resolve) => setTimeout(resolve, 1000)),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
         ])
       }).catch(() => {})
-      const screenshot = await page.screenshot({ animations: 'disabled', timeout: 5000 })
+      const screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 })
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
         contentType: 'image/png',
