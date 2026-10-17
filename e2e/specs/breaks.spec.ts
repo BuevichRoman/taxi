@@ -58,7 +58,8 @@ test('короткий перерыв не попадает в список, н�
   await page.locator(confirm).first().click()
 
   await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
-  await expect(page.locator('.breaks_list-empty')).toBeVisible()
+  // Без подсказки «Перерывов не было» спорит с ненулевым итогом
+  await expect(page.locator('.breaks_list-empty')).toHaveText('Короткие перерывы в список не попадают, но учтены в итогах')
   await expect(page.locator('.breaks_list-header span').last()).toHaveText('0')
 
   // В суммах он есть: перерывы перестали быть нулевыми
@@ -91,4 +92,13 @@ test('заказ завершён во время перерыва: переры
   expect(asked).toMatchObject({ action: 'final', b_id: Number(DEMO_ORDER_ID) })
   expect(typeof asked.duration_min).toBe('number')
   await expect(page.locator('.breaks_summary tbody tr').nth(3).locator('td').nth(2)).toHaveText(/^\d+$/)
+})
+
+test('экран заказа показывает серверную цену, а не таксишную формулу', async ({ nannyPage: page }) => {
+  await page.goto(`/driver-order/${DEMO_ORDER_ID}`)
+
+  // Цену в заказ пишет шаблон nanny_pricing, в моке она 200
+  const payment = page.locator('.order-info__payment')
+  await expect(payment).toContainText('200')
+  await expect(payment).not.toContainText('*')
 })
