@@ -38,6 +38,14 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+      # MAN-10 PHP regression runs against the actual template and harness in MultiBot.
+      # Use the dedicated MAN-10 branch until PR #19 is merged; then switch this ref to master.
+      - uses: actions/checkout@v4
+        with:
+          repository: BuevichRoman/MultiBot
+          ref: test/man-10-idempotency-payload
+          path: MultiBot
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -99,8 +107,9 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: playwright-report
-          path: playwright-report
+          name: wimi-kids-html-report
+          path: wimi-kids-report.html
+          if-no-files-found: warn
           retention-days: 7
