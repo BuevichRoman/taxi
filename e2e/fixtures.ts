@@ -177,23 +177,51 @@ export async function evidenceStep(
         })
         return { textLength: text.length, visibleLoading, title: document.title }
       }).catch(() => ({ textLength: 0, visibleLoading: true, title: '' }))
-      // CI comparison showed CDP Page.captureScreenshot was the only method
-      // that produced a non-black frame on every tested scenario. Use it for all
-      // steps instead of mapping methods to step numbers.
-      const captureMode = 'cdp-captureScreenshot'
+      // Compare capture paths in the same run. CI reports success even when
+      // the compositor returns an all-black PNG, so the artifact is inspected
+      // by pixel content after the run rather than treating a successful call
+      // as proof of a valid screenshot.
+      const captureMode = ({
+        1: 'cdp-fromSurface-false',
+        2: 'cdp-default-options',
+        3: 'cdp-forced-repaint-fromSurface-true',
+        4: 'playwright-page-screenshot',
+      } as Record<number, string>)[number] ?? 'cdp-fromSurface-true'
       let screenshot: Buffer
       let captureError: string | null = null
       try {
-        const session = await page.context().newCDPSession(page)
-        try {
-          const result = await session.send('Page.captureScreenshot', {
-            format: 'png',
-            fromSurface: true,
-            captureBeyondViewport: false,
-          })
-          screenshot = Buffer.from(result.data, 'base64')
-        } finally {
-          await session.detach().catch(() => {})
+        if (captureMode === 'playwright-page-screenshot') {
+          screenshot = await page.screenshot({ type: 'png', animations: 'disabled' })
+        } else {
+          const session = await page.context().newCDPSession(page)
+          try {
+            if (captureMode === 'cdp-forced-repaint-fromSurface-true') {
+              // Invalidate layout/paint without changing the visible design, then
+              // wait for two compositor frames before capturing.
+              await page.evaluate(async () => {
+                const root = document.querySelector('#root') as HTMLElement | null
+                if (root) {
+                  void root.getBoundingClientRect()
+                  root.style.setProperty('will-change', 'transform')
+                  void root.offsetHeight
+                  root.style.removeProperty('will-change')
+                }
+                window.dispatchEvent(new Event('resize'))
+                await new Promise<void>((resolve) => requestAnimationFrame(() =>
+                  requestAnimationFrame(() => resolve())
+                ))
+              })
+            }
+            const options = captureMode === 'cdp-fromSurface-false'
+              ? { format: 'png' as const, fromSurface: false, captureBeyondViewport: false }
+              : captureMode === 'cdp-default-options'
+                ? { format: 'png' as const }
+                : { format: 'png' as const, fromSurface: true, captureBeyondViewport: false }
+            const result = await session.send('Page.captureScreenshot', options)
+            screenshot = Buffer.from(result.data, 'base64')
+          } finally {
+            await session.detach().catch(() => {})
+          }
         }
       } catch (error) {
         captureError = error instanceof Error ? error.message : String(error)
