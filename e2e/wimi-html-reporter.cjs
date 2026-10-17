@@ -80,6 +80,13 @@ class WimiHtmlReporter {
   async onEnd(result) {
     const manualCasesPath = path.join(__dirname, 'wimi-manual-cases.json');
     const manualCases = fs.existsSync(manualCasesPath) ? JSON.parse(fs.readFileSync(manualCasesPath, 'utf8')) : [];
+    const externalResultPath = path.join(process.cwd(), 'e2e', 'wimi-man10-result.json');
+    let externalMan10 = null;
+    try {
+      externalMan10 = JSON.parse(fs.readFileSync(externalResultPath, 'utf8'));
+    } catch { /* standalone Playwright runs may not execute the PHP harness */ }
+    const externalStatusValue = externalMan10?.status || process.env.WIMI_MAN10_STATUS;
+    const externalActualValue = externalMan10?.actual || process.env.WIMI_MAN10_ACTUAL || '';
     const manualStatus = (item) => {
       const linked = this.results.filter((test) => test.id === item.id);
       const externalStatus = item.id === 'MAN-10' && ['PASS', 'FAIL', 'BLOCKED'].includes(process.env.WIMI_MAN10_STATUS)
@@ -158,7 +165,7 @@ class WimiHtmlReporter {
           const status = manualStatus(item);
           const relatedSummary = related.map((test) => test.title + ': ' + test.status).join('; ');
           const actual = linked.length ? linked.map((test) => test.error || ('Playwright: ' + test.status)).join('\n')
-            : item.id === 'MAN-10' && process.env.WIMI_MAN10_ACTUAL ? process.env.WIMI_MAN10_ACTUAL
+            : item.id === 'MAN-10' && externalActualValue ? externalActualValue
             : relatedSummary ? item.blocker + ' Частичные проверки в этом прогоне: ' + relatedSummary + '. Полный сценарий остаётся ' + status + '.' : item.blocker;
           const stepActual = status === 'BLOCKED' ? 'BLOCKED — ' + item.blocker
             : item.id === 'MAN-10' ? 'PHP regression harness: ' + status + '. Детальный вывод приведён в фактическом результате сценария.'
