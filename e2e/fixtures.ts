@@ -147,7 +147,13 @@ export async function evidenceStep(
       // SPA may have completed navigation before React finished rendering. Wait
       // for a real app root child and two paint frames before capturing.
       await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
-      await page.waitForTimeout(1000)
+      // Wait for known loading overlays/spinners to disappear. A fixed delay
+      // alone is not sufficient when API requests or React rendering are slow.
+      const loadingIndicators = page.locator(
+        '[aria-busy="true"], [role="progressbar"], .MuiCircularProgress-root, .MuiBackdrop-root, .loading, .loader, .spinner, [data-testid*="loading" i]'
+      )
+      await loadingIndicators.first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {})
+      await page.waitForTimeout(250)
       await page.evaluate(async () => {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
         if (document.fonts?.ready) await Promise.race([
@@ -159,10 +165,26 @@ export async function evidenceStep(
           new Promise((resolve) => setTimeout(resolve, 1500)),
         ])
       }).catch(() => {})
+      const visualState = await page.evaluate(() => {
+        const body = document.body
+        const text = (body?.innerText || '').trim()
+        const visibleLoading = Array.from(document.querySelectorAll(
+          '[aria-busy="true"], [role="progressbar"], .MuiCircularProgress-root, .MuiBackdrop-root, .loading, .loader, .spinner, [data-testid*="loading" i]'
+        )).some((el) => {
+          const style = getComputedStyle(el)
+          const rect = el.getBoundingClientRect()
+          return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0
+        })
+        return { textLength: text.length, visibleLoading, title: document.title }
+      }).catch(() => ({ textLength: 0, visibleLoading: true, title: '' }))
       const screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 })
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
         contentType: 'image/png',
+      })
+      await testInfo.attach(`step-${number}-visual-state.json`, {
+        body: Buffer.from(JSON.stringify(visualState, null, 2)),
+        contentType: 'application/json',
       })
     } catch {
       // При закрытой странице скриншот может быть недоступен; ошибка шага
