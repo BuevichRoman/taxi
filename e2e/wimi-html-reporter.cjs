@@ -80,7 +80,7 @@ class WimiHtmlReporter {
   async onEnd(result) {
     const manualCasesPath = path.join(__dirname, 'wimi-manual-cases.json');
     const manualCases = fs.existsSync(manualCasesPath) ? JSON.parse(fs.readFileSync(manualCasesPath, 'utf8')) : [];
-    const externalResultPath = path.join(process.cwd(), 'e2e', 'wimi-man10-result.json');
+    const externalResultPath = path.join(__dirname, 'wimi-man10-result.json');
     let externalMan10 = null;
     try {
       externalMan10 = JSON.parse(fs.readFileSync(externalResultPath, 'utf8'));
@@ -201,7 +201,7 @@ article{margin:12px 0}.coverage{margin:22px 0}.coverage table{width:100%;border-
 <h1>WIMI KIDS — отчёт автоматизированных проверок</h1>
 <p class="meta">Прогон: ${escapeHtml(localDate)} (${timezone}) · Начало: ${escapeHtml(this.startedAt.toISOString())} · Сборка: ${escapeHtml(process.env.BUILD_VERSION || process.env.GITHUB_SHA || 'не задана')} · Playwright: ${escapeHtml(result.status || 'завершён')}</p>
 <section class="summary"><div class="metric"><strong>${manualCases.length || this.results.length}</strong><span>${manualCases.length ? "сценариев MAN" : "тестов Playwright"}</span></div><div class="metric"><strong>${counts.PASS}</strong><span>PASS</span></div><div class="metric"><strong>${counts.FAIL}</strong><span>FAIL</span></div><div class="metric"><strong>${counts.BLOCKED}</strong><span>BLOCKED / пропущено</span></div></section>
-<p class="muted">MAN-сценарии: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.BLOCKED} BLOCKED. Playwright: ${this.results.length} тестов; ${testCounts.PASS} PASS, ${testCounts.FAIL} FAIL, ${testCounts.BLOCKED} BLOCKED. PASS означает фактически пройденную проверку. Вложения встроены в этот HTML-файл.</p>${slideTestTable}
+<p class="muted">MAN-сценарии: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.BLOCKED} BLOCKED. Playwright: ${this.results.length} тестов; ${testCounts.PASS} PASS, ${testCounts.FAIL} FAIL, ${testCounts.BLOCKED} BLOCKED. PASS означает фактически пройденную проверку. Вложения встроены в этот HTML-файл.</p>${coverageHtml}${slideTestTable}
 </article>
 ${slidesHtml || '<p>Нет скриншотов шагов.</p>'}<section id="summary-slide" class="summary-slide"><h2>Последний слайд — общий блок тестов</h2><p>Прокручивайте этот блок для просмотра сводки и всех тестов.</p>${testsHtml || '<p>В этом прогоне тесты не запускались.</p>'}</section></section>
 </main><script>(function(){
