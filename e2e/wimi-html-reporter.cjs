@@ -113,13 +113,31 @@ class WimiHtmlReporter {
       return `<article class="test ${item.status.toLowerCase()}"><header><span class="badge">${item.status}</span><h2>${escapeHtml(item.title)}</h2><span class="duration">${item.duration} мс</span></header>${item.error ? `<pre class="error">${escapeHtml(item.error)}</pre>` : ''}${steps}<div class="attachments">${attachments}</div></article>`;
     }).join('');
 
-    const slideItems = this.results.flatMap((item) => item.stepDetails.map((step) => ({ item, step, screenshot: item.attachments.find((a) => a.name === 'step-' + step.number + '-screenshot.png') })));
-    const testGroups = [...new Set(slideItems.map((entry) => entry.item.title))];
-    const slidesHtml = slideItems.map((entry, index) => '<article class="slide" data-slide="' + index + '" data-test-group="' + escapeHtml(entry.item.title) + '" hidden>' +
-      '<header><strong>' + escapeHtml(entry.item.title) + '</strong><span>Шаг ' + entry.step.number + '</span></header>' +
+    const slideItems = this.results.flatMap((item) => item.stepDetails.map((step) => {
+      const relatedCases = manualCases.filter((manual) => (manual.relatedTests || []).some((title) => item.title.includes(title)));
+      const manual = relatedCases[0] || manualCases.find((candidate) => candidate.id === item.id);
+      return {
+        item, step,
+        screenshot: item.attachments.find((a) => a.name === 'step-' + step.number + '-screenshot.png'),
+        manual,
+        group: manual ? manual.id + ' — ' + manual.title : (item.id || item.title),
+        groupIds: relatedCases.length ? relatedCases.map((candidate) => candidate.id) : [manual?.id || item.id || item.title],
+      };
+    }));
+    const testGroups = [...new Map(slideItems.flatMap((entry) => entry.groupIds.map((id) => {
+      const manual = manualCases.find((candidate) => candidate.id === id);
+      return [id, { id, label: manual ? manual.id + ' — ' + manual.title : entry.group }];
+    })).map(([id, value]) => [id, value])).values()];
+    const slidesHtml = slideItems.map((entry, index) => '<article class="slide" data-slide="' + index + '" data-test-group="' + escapeHtml(entry.groupIds.join(',')) + '" hidden>' +
+      '<header><strong>' + escapeHtml(entry.group) + '</strong><span>Шаг ' + entry.step.number + '</span></header>' +
       (entry.screenshot ? '<img class="slide-image" alt="Скриншот шага ' + entry.step.number + '" src="' + entry.screenshot.body + '">' : '<div class="no-image">Скриншот не сохранён</div>') +
       '<button class="comment-toggle" type="button" aria-expanded="false">Показать комментарий</button>' +
-      '<div class="slide-comment" hidden><p><b>Действие:</b> ' + escapeHtml(entry.step.action) + '</p><p><b>Ожидаемо:</b> ' + escapeHtml(entry.step.expected) + '</p><p><b>Фактически:</b> ' + escapeHtml(entry.step.actual) + '</p><p><b>Статус:</b> ' + escapeHtml(entry.step.status) + ' · <b>Время:</b> ' + entry.step.elapsedMs + ' мс · <b>часы мока:</b> ' + escapeHtml(entry.step.simulatedTime || 'не получены') + '</p></div></article>').join('');
+      '<div class="slide-comment" hidden><p><b>Тест:</b> ' + escapeHtml(entry.item.title) + '</p><p><b>Сценарий:</b> ' + escapeHtml(entry.group) + '</p><p><b>Действие:</b> ' + escapeHtml(entry.step.action) + '</p><p><b>Ожидаемо:</b> ' + escapeHtml(entry.step.expected) + '</p><p><b>Фактически:</b> ' + escapeHtml(entry.step.actual) + '</p><p><b>Статус:</b> ' + escapeHtml(entry.step.status) + ' · <b>Время:</b> ' + entry.step.elapsedMs + ' мс · <b>часы мока:</b> ' + escapeHtml(entry.step.simulatedTime || 'не получены') + '</p></div></article>').join('');
+    const slideTestTable = '<section class="coverage"><h2>Тесты в этом прогоне</h2><table><thead><tr><th>Сценарий MAN</th><th>Тест Playwright</th><th>Статус</th></tr></thead><tbody>' +
+      this.results.map((item) => {
+        const manual = manualCases.find((candidate) => (candidate.relatedTests || []).some((title) => item.title.includes(title))) || manualCases.find((candidate) => candidate.id === item.id);
+        return '<tr><td>' + escapeHtml(manual ? manual.id + ' — ' + manual.title : item.id || 'Не сопоставлен') + '</td><td>' + escapeHtml(item.title) + '</td><td>' + escapeHtml(item.status) + '</td></tr>';
+      }).join('') + '</tbody></table></section>';
     const coverageHtml = manualCases.length
       ? '<section class="coverage"><h2>Покрытие MAN-01…MAN-10</h2><p class="muted">PASS/FAIL выставляется только при наличии соответствующего теста MAN-XX в этом прогоне. Иначе сценарий остаётся BLOCKED с причиной.</p><table><thead><tr><th>ID / сценарий</th><th>Шаги</th><th>Статус</th><th>Ожидаемо</th><th>Фактически / блокер</th></tr></thead><tbody>' +
         manualCases.map((item) => {
@@ -159,18 +177,18 @@ article{margin:12px 0}.coverage{margin:22px 0}.coverage table{width:100%;border-
 #image-viewer{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);padding:12px;align-items:center;justify-content:center;flex-direction:column}#image-viewer.open{display:flex}#image-viewer img{max-width:100%;max-height:88vh;object-fit:contain}#image-viewer button{color:#fff;background:#333;border:1px solid #aaa;border-radius:8px;padding:10px 16px;margin-bottom:10px;font-size:16px}
 @media(max-width:620px){main{padding:12px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.coverage{overflow-x:auto}.coverage table{min-width:680px}}
 </style></head><body><main>
-<section class="slideshow"><div class="slide-controls"><button id="first-slide" type="button" aria-label="К первому слайду">&lt;&lt;</button><button id="prev-slide" type="button" aria-label="Предыдущий слайд">←</button><span id="slide-counter"></span><button id="next-slide" type="button" aria-label="Следующий слайд">→</button><button id="last-slide" type="button" aria-label="К последнему слайду">&gt;&gt;</button><select id="test-selector" aria-label="Выбрать тест"><option value="all">Все тесты</option>${testGroups.map((name) => '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>').join('')}</select></div>
+<section class="slideshow"><div class="slide-controls"><button id="first-slide" type="button" aria-label="К первому слайду">&lt;&lt;</button><button id="prev-slide" type="button" aria-label="Предыдущий слайд">←</button><span id="slide-counter"></span><button id="next-slide" type="button" aria-label="Следующий слайд">→</button><button id="last-slide" type="button" aria-label="К последнему слайду">&gt;&gt;</button><select id="test-selector" aria-label="Выбрать тест">${testGroups.map((group) => '<option value="' + escapeHtml(group.id) + '">' + escapeHtml(group.label) + '</option>').join('')}</select></div>
 <article class="slide intro-slide" data-slide="intro" hidden>
 <h1>WIMI KIDS — отчёт автоматизированных проверок</h1>
 <p class="meta">Прогон: ${escapeHtml(localDate)} (${timezone}) · Начало: ${escapeHtml(this.startedAt.toISOString())} · Сборка: ${escapeHtml(process.env.BUILD_VERSION || process.env.GITHUB_SHA || 'не задана')} · Playwright: ${escapeHtml(result.status || 'завершён')}</p>
 <section class="summary"><div class="metric"><strong>${manualCases.length || this.results.length}</strong><span>${manualCases.length ? "сценариев MAN" : "тестов Playwright"}</span></div><div class="metric"><strong>${counts.PASS}</strong><span>PASS</span></div><div class="metric"><strong>${counts.FAIL}</strong><span>FAIL</span></div><div class="metric"><strong>${counts.BLOCKED}</strong><span>BLOCKED / пропущено</span></div></section>
-<p class="muted">MAN-сценарии: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.BLOCKED} BLOCKED. Playwright: ${this.results.length} тестов; ${testCounts.PASS} PASS, ${testCounts.FAIL} FAIL, ${testCounts.BLOCKED} BLOCKED. PASS означает фактически пройденную проверку. Вложения встроены в этот HTML-файл.</p>
+<p class="muted">MAN-сценарии: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.BLOCKED} BLOCKED. Playwright: ${this.results.length} тестов; ${testCounts.PASS} PASS, ${testCounts.FAIL} FAIL, ${testCounts.BLOCKED} BLOCKED. PASS означает фактически пройденную проверку. Вложения встроены в этот HTML-файл.</p>${slideTestTable}
 </article>
-${slidesHtml || '<p>Нет скриншотов шагов.</p>'}<section id="summary-slide" class="summary-slide"><h2>Последний слайд — общий блок тестов</h2><p>Прокручивайте этот блок для просмотра сводки и всех тестов.</p>${coverageHtml}${testsHtml || '<p>В этом прогоне тесты не запускались.</p>'}</section></section>
+${slidesHtml || '<p>Нет скриншотов шагов.</p>'}<section id="summary-slide" class="summary-slide"><h2>Последний слайд — общий блок тестов</h2><p>Прокручивайте этот блок для просмотра сводки и всех тестов.</p>${testsHtml || '<p>В этом прогоне тесты не запускались.</p>'}</section></section>
 </main><script>(function(){
 const slides=[...document.querySelectorAll(".slide:not(.intro-slide)")],intro=document.querySelector(".intro-slide"),summary=document.getElementById("summary-slide"),counter=document.getElementById("slide-counter"),selector=document.getElementById("test-selector");
 let current=null,visible=[];const swipeArea=document.querySelector(".slideshow");let touchStart=null;
-function rebuild(){const chosen=selector.value;visible=slides.filter(s=>chosen==="all"||s.dataset.testGroup===chosen);current=null;showIntro()}
+function rebuild(){const chosen=selector.value;visible=slides.filter(s=>s.dataset.testGroup.split(",").includes(chosen));current=null;showIntro()}
 function updateSelectorVisibility(show){selector.classList.toggle("selector-hidden",!show)}\nfunction showIntro(){intro.hidden=false;updateSelectorVisibility(true);slides.forEach(s=>s.hidden=true);summary.style.display="none";counter.textContent="Слайд 1 из "+(visible.length+2);document.getElementById("prev-slide").disabled=true;document.getElementById("first-slide").disabled=true;document.getElementById("next-slide").disabled=false;document.getElementById("last-slide").disabled=false}
 function show(n){if(n<=0){showIntro();return}if(n>visible.length){intro.hidden=true;slides.forEach(s=>s.hidden=true);summary.style.display="block";updateSelectorVisibility(true);current=visible.length+1;counter.textContent="Итоги · слайд "+(visible.length+2)+" из "+(visible.length+2);document.getElementById("prev-slide").disabled=false;document.getElementById("first-slide").disabled=false;document.getElementById("next-slide").disabled=true;document.getElementById("last-slide").disabled=true;return}
 intro.hidden=true;summary.style.display="none";updateSelectorVisibility(false);slides.forEach(s=>s.hidden=true);visible[n-1].hidden=false;current=n;counter.textContent="Слайд "+(n+1)+" из "+(visible.length+2);document.getElementById("prev-slide").disabled=n===1;document.getElementById("first-slide").disabled=false;document.getElementById("next-slide").disabled=false;document.getElementById("last-slide").disabled=false}
