@@ -177,13 +177,24 @@ export async function evidenceStep(
         })
         return { textLength: text.length, visibleLoading, title: document.title }
       }).catch(() => ({ textLength: 0, visibleLoading: true, title: '' }))
-      const screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 })
+      // Capture the rendered application root first. Full viewport captures
+      // have intermittently produced all-black PNGs in headless Chromium even
+      // while DOM text was present. Element capture avoids unrelated viewport
+      // compositor layers; retain a viewport fallback if the root is unavailable.
+      let screenshot: Buffer
+      let captureMode = 'root'
+      try {
+        screenshot = await page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 })
+      } catch {
+        captureMode = 'viewport-fallback'
+        screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 })
+      }
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
         contentType: 'image/png',
       })
       await testInfo.attach(`step-${number}-visual-state.json`, {
-        body: Buffer.from(JSON.stringify(visualState, null, 2)),
+        body: Buffer.from(JSON.stringify({ ...visualState, captureMode }, null, 2)),
         contentType: 'application/json',
       })
     } catch {
