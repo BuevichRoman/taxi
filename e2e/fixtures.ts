@@ -181,13 +181,40 @@ export async function evidenceStep(
       // have intermittently produced all-black PNGs in headless Chromium even
       // while DOM text was present. Element capture avoids unrelated viewport
       // compositor layers; retain a viewport fallback if the root is unavailable.
-      let screenshot: Buffer
+      // Chromium can return a valid PNG that is almost entirely black without
+      // throwing. Detect the known blank-frame signature and retry using different
+      // capture targets; a successful API call alone is not evidence of a usable image.
+      let screenshot: Buffer | undefined
       let captureMode = 'root'
-      try {
-        screenshot = await page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 })
-      } catch {
-        captureMode = 'viewport-fallback'
-        screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 })
+      const attempts: Array<{ mode: string; capture: () => Promise<Buffer> }> = [
+        { mode: 'root', capture: () => page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 }) },
+        { mode: 'body', capture: () => page.locator('body').screenshot({ animations: 'disabled', timeout: 8000 }) },
+        { mode: 'viewport', capture: () => page.screenshot({ animations: 'disabled', timeout: 8000 }) },
+      ]
+      for (const attempt of attempts) {
+        try {
+          const candidate = await attempt.capture()
+          // On this app's 1280×720 CI viewport, valid UI screenshots are tens
+          // of kilobytes; the observed black frames are ~5.7 KB despite
+          // hundreds of visible DOM characters. Retry instead of accepting them.
+          const looksBlank = visualState.textLength > 100 && candidate.byteLength < 12 * 1024
+          if (!looksBlank) {
+            screenshot = candidate
+            captureMode = attempt.mode
+            break
+          }
+          await page.evaluate(() => new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+          )).catch(() => {})
+        } catch {
+          // Try the next capture target; page closure is handled below.
+        }
+      }
+      if (!screenshot) {
+        // Preserve the last available frame for diagnosis, but record that every
+        // capture attempt looked blank so the report cannot silently imply success.
+        captureMode = 'blank-after-root-body-viewport-retries'
+        screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 }).catch(() => Buffer.alloc(0))
       }
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
