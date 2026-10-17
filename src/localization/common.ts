@@ -120,6 +120,7 @@ export default {
   BREAK_ON_SINCE: 'break_on_since',
   BREAKS_LIST: 'breaks_list',
   BREAKS_NONE: 'breaks_none',
+  BREAKS_SHORT_HIDDEN: 'breaks_short_hidden',
   TIME_WORK: 'time_work',
   TIME_BREAKS: 'time_breaks',
   TIME_TOTAL: 'time_total',

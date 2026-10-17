@@ -97,6 +97,9 @@ const Breaks: React.FC<IProps> = ({ order }) => {
 
   const activeBreak = actual.breaks.find(item => item.ended === null)
   const visibleBreaks = actual.breaks.filter(item => item.display && item.ended !== null)
+  // Перерывы короче порога скрыты из списка, но входят в суммы — без подсказки
+  // «Перерывов не было» спорит с ненулевым итогом
+  const hasHiddenBreaks = actual.breaks.some(item => !item.display && item.ended !== null)
 
   /**
    * Стоимость по оплачиваемому времени (ТЗ п. 11: единый алгоритм расчёта).
@@ -212,7 +215,9 @@ const Breaks: React.FC<IProps> = ({ order }) => {
         </div>
         {visibleBreaks.length > 0 ?
           <ul>{visibleBreaks.map(renderBreak)}</ul> :
-          <div className="breaks_list-empty">{tBreak(TRANSLATION.BREAKS_NONE)}</div>
+          <div className="breaks_list-empty">
+            {tBreak(hasHiddenBreaks ? TRANSLATION.BREAKS_SHORT_HIDDEN : TRANSLATION.BREAKS_NONE)}
+          </div>
         }
       </div>
     </div>

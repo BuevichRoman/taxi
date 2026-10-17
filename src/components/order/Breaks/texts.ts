@@ -19,6 +19,7 @@ const FALLBACK: Record<string, string> = {
   [TRANSLATION.BREAK_ON_SINCE]: 'На перерыве с',
   [TRANSLATION.BREAKS_LIST]: 'Перерывы',
   [TRANSLATION.BREAKS_NONE]: 'Перерывов не было',
+  [TRANSLATION.BREAKS_SHORT_HIDDEN]: 'Короткие перерывы в список не попадают, но учтены в итогах',
   [TRANSLATION.TIME_WORK]: 'Рабочее время',
   [TRANSLATION.TIME_BREAKS]: 'Перерывы',
   [TRANSLATION.TIME_TOTAL]: 'Общее время заказа',
