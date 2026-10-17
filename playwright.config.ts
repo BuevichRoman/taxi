@@ -19,6 +19,10 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['./e2e/wimi-html-reporter.cjs', { outputFile: 'wimi-kids-report.html' }]],
   use: {
+    launchOptions: {
+      // Avoid intermittent all-black PNGs from the headless Chromium compositor in CI.
+      args: ['--disable-gpu'],
+    },
     baseURL: `http://localhost:${APP_PORT}`,
     locale: 'ru-RU',
     trace: 'retain-on-failure',
