@@ -17,12 +17,13 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
-  reporter: process.env.CI ? [['list'], ['github'], ['html', { open: 'never' }]] : [['list']],
+  reporter: [['list'], ['./e2e/wimi-html-reporter.cjs', { outputFile: 'wimi-kids-report.html' }]],
   use: {
     baseURL: `http://localhost:${APP_PORT}`,
     locale: 'ru-RU',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [

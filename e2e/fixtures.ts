@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
 
 /**
  * Вход в приложение няни для прогона.
@@ -97,3 +97,64 @@ export const test = base.extend<{ nannyPage: Page }>({
 })
 
 export { expect }
+
+
+/**
+ * Выполняет один проверяемый шаг и сохраняет самодостаточное доказательство:
+ * действие, ожидание, фактический результат, время шага, серверные (мок-)часы
+ * и скриншот. Ошибка не подавляется: Playwright-тест остаётся FAIL.
+ */
+export async function evidenceStep(
+  page: Page,
+  testInfo: TestInfo,
+  number: number,
+  action: string,
+  expected: string,
+  actualOnPass: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const startedAt = Date.now()
+  let status: 'PASS' | 'FAIL' = 'PASS'
+  let actual = actualOnPass
+  let errorText: string | undefined
+
+  try {
+    await base.step(`${number}. ${action}`, run)
+  } catch (error) {
+    status = 'FAIL'
+    errorText = error instanceof Error ? error.message : String(error)
+    actual = errorText
+    throw error
+  } finally {
+    const elapsedMs = Date.now() - startedAt
+    let simulatedTime: string | null = null
+    try {
+      const response = await fetch(`${APP_URL}/api/v1/data`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(2000),
+      })
+      const dateHeader = response.headers.get('date')
+      simulatedTime = dateHeader ? new Date(dateHeader).toISOString() : null
+    } catch {
+      // Снимок и результат шага важнее необязательного значения часов.
+    }
+
+    try {
+      const screenshot = await page.screenshot({ animations: 'disabled' })
+      await testInfo.attach(`step-${number}-screenshot.png`, {
+        body: screenshot,
+        contentType: 'image/png',
+      })
+    } catch {
+      // При закрытой странице скриншот может быть недоступен; ошибка шага
+      // остаётся в JSON-доказательстве и в обычном результате Playwright.
+    }
+
+    await testInfo.attach(`step-${number}-details.json`, {
+      body: Buffer.from(JSON.stringify({
+        number, action, expected, actual, status, elapsedMs, simulatedTime, error: errorText ?? null,
+      }, null, 2)),
+      contentType: 'application/json',
+    })
+  }
+}
