@@ -89,8 +89,8 @@ class WimiHtmlReporter {
     const externalActualValue = externalMan10?.actual || process.env.WIMI_MAN10_ACTUAL || '';
     const manualStatus = (item) => {
       const linked = this.results.filter((test) => test.id === item.id);
-      const externalStatus = item.id === 'MAN-10' && ['PASS', 'FAIL', 'BLOCKED'].includes(process.env.WIMI_MAN10_STATUS)
-        ? process.env.WIMI_MAN10_STATUS : null;
+      const externalStatus = item.id === 'MAN-10' && ['PASS', 'FAIL', 'BLOCKED'].includes(externalStatusValue)
+        ? externalStatusValue : null;
       if (linked.some((test) => test.status === 'FAIL') || externalStatus === 'FAIL') return 'FAIL';
       if (linked.length && linked.every((test) => test.status === 'PASS')) return 'PASS';
       return externalStatus || 'BLOCKED';
