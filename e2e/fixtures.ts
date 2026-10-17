@@ -177,45 +177,85 @@ export async function evidenceStep(
         })
         return { textLength: text.length, visibleLoading, title: document.title }
       }).catch(() => ({ textLength: 0, visibleLoading: true, title: '' }))
-      // Capture the rendered application root first. Full viewport captures
-      // have intermittently produced all-black PNGs in headless Chromium even
-      // while DOM text was present. Element capture avoids unrelated viewport
-      // compositor layers; retain a viewport fallback if the root is unavailable.
-      // Chromium can return a valid PNG that is almost entirely black without
-      // throwing. Detect the known blank-frame signature and retry using different
-      // capture targets; a successful API call alone is not evidence of a usable image.
-      let screenshot: Buffer | undefined
-      let captureMode = 'root'
-      const attempts: Array<{ mode: string; capture: () => Promise<Buffer> }> = [
-        { mode: 'root', capture: () => page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 }) },
-        { mode: 'body', capture: () => page.locator('body').screenshot({ animations: 'disabled', timeout: 8000 }) },
-        { mode: 'viewport', capture: () => page.screenshot({ animations: 'disabled', timeout: 8000 }) },
-      ]
-      for (const attempt of attempts) {
-        try {
-          const candidate = await attempt.capture()
-          // On this app's 1280×720 CI viewport, valid UI screenshots are tens
-          // of kilobytes; the observed black frames are ~5.7 KB despite
-          // hundreds of visible DOM characters. Retry instead of accepting them.
-          const looksBlank = visualState.textLength > 100 && candidate.byteLength < 12 * 1024
-          if (!looksBlank) {
-            screenshot = candidate
-            captureMode = attempt.mode
-            break
+      // Diagnostic experiment: use one different capture path for each of the
+      // four steps, rather than retrying several methods on the same frame.
+      // This makes it possible to compare the methods against the same scenario.
+      const captureModes = [
+        {
+          mode: 'root-element',
+          capture: async () => page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 }),
+        },
+        {
+          mode: 'body-element',
+          capture: async () => page.locator('body').screenshot({ animations: 'disabled', timeout: 8000 }),
+        },
+        {
+          mode: 'viewport-screenshot',
+          capture: async () => page.screenshot({ animations: 'disabled', timeout: 8000 }),
+        },
+        {
+          mode: 'cdp-captureScreenshot',
+          capture: async () => {
+            const session = await page.context().newCDPSession(page);
+            try {
+              const result = await session.send('Page.captureScreenshot', {
+                format: 'png',
+                fromSurface: true,
+                captureBeyondViewport: false,
+              });
+              return Buffer.from(result.data, 'base64');
+            } finally {
+              await session.detach().catch(() => {});
+            }
+          },
+        },
+      ] as const
+      const selectedCapture = captureModes[(number - 1) % captureModes.length]
+      let screenshot: Buffer
+      let captureError: string | null = null
+      try {
+        screenshot = await selectedCapture.capture()
+      } catch (error) {
+        captureError = error instanceof Error ? error.message : String(error)
+        screenshot = Buffer.alloc(0)
+      }
+      const captureDiagnostics = await page.evaluate(() => {
+        const root = document.querySelector('#root')
+        const body = document.body
+        const inspect = (element: Element | null) => {
+          if (!element) return null
+          const rect = element.getBoundingClientRect()
+          const style = getComputedStyle(element)
+          return {
+            tag: element.tagName,
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            display: style.display,
+            visibility: style.visibility,
+            opacity: style.opacity,
+            backgroundColor: style.backgroundColor,
+            color: style.color,
+            childCount: element.childElementCount,
           }
-          await page.evaluate(() => new Promise<void>((resolve) =>
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-          )).catch(() => {})
-        } catch {
-          // Try the next capture target; page closure is handled below.
         }
-      }
-      if (!screenshot) {
-        // Preserve the last available frame for diagnosis, but record that every
-        // capture attempt looked blank so the report cannot silently imply success.
-        captureMode = 'blank-after-root-body-viewport-retries'
-        screenshot = await page.screenshot({ animations: 'disabled', timeout: 8000 }).catch(() => Buffer.alloc(0))
-      }
+        return {
+          viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+          root: inspect(root),
+          body: inspect(body),
+          textLength: (body?.innerText || '').trim().length,
+          readyState: document.readyState,
+        }
+      }).catch(() => null)
+      await testInfo.attach(`step-${number}-capture-diagnostics.json`, {
+        body: Buffer.from(JSON.stringify({
+          captureMode: selectedCapture.mode,
+          captureBytes: screenshot.length,
+          captureError,
+          ...visualState,
+          captureDiagnostics,
+        }, null, 2)),
+        contentType: 'application/json',
+      })
       await testInfo.attach(`step-${number}-screenshot.png`, {
         body: screenshot,
         contentType: 'image/png',
