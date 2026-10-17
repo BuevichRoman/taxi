@@ -177,44 +177,24 @@ export async function evidenceStep(
         })
         return { textLength: text.length, visibleLoading, title: document.title }
       }).catch(() => ({ textLength: 0, visibleLoading: true, title: '' }))
-      // Diagnostic experiment: use one different capture path for each of the
-      // four steps, rather than retrying several methods on the same frame.
-      // This makes it possible to compare the methods against the same scenario.
-      const captureModes = [
-        {
-          mode: 'root-element',
-          capture: async () => page.locator('#root').screenshot({ animations: 'disabled', timeout: 8000 }),
-        },
-        {
-          mode: 'body-element',
-          capture: async () => page.locator('body').screenshot({ animations: 'disabled', timeout: 8000 }),
-        },
-        {
-          mode: 'viewport-screenshot',
-          capture: async () => page.screenshot({ animations: 'disabled', timeout: 8000 }),
-        },
-        {
-          mode: 'cdp-captureScreenshot',
-          capture: async () => {
-            const session = await page.context().newCDPSession(page);
-            try {
-              const result = await session.send('Page.captureScreenshot', {
-                format: 'png',
-                fromSurface: true,
-                captureBeyondViewport: false,
-              });
-              return Buffer.from(result.data, 'base64');
-            } finally {
-              await session.detach().catch(() => {});
-            }
-          },
-        },
-      ] as const
-      const selectedCapture = captureModes[(number - 1) % captureModes.length]
+      // CI comparison showed CDP Page.captureScreenshot was the only method
+      // that produced a non-black frame on every tested scenario. Use it for all
+      // steps instead of mapping methods to step numbers.
+      const captureMode = 'cdp-captureScreenshot'
       let screenshot: Buffer
       let captureError: string | null = null
       try {
-        screenshot = await selectedCapture.capture()
+        const session = await page.context().newCDPSession(page)
+        try {
+          const result = await session.send('Page.captureScreenshot', {
+            format: 'png',
+            fromSurface: true,
+            captureBeyondViewport: false,
+          })
+          screenshot = Buffer.from(result.data, 'base64')
+        } finally {
+          await session.detach().catch(() => {})
+        }
       } catch (error) {
         captureError = error instanceof Error ? error.message : String(error)
         screenshot = Buffer.alloc(0)
@@ -248,7 +228,7 @@ export async function evidenceStep(
       }).catch(() => null)
       await testInfo.attach(`step-${number}-capture-diagnostics.json`, {
         body: Buffer.from(JSON.stringify({
-          captureMode: selectedCapture.mode,
+          captureMode,
           captureBytes: screenshot.length,
           captureError,
           ...visualState,
