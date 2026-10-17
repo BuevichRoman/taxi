@@ -181,12 +181,15 @@ export async function evidenceStep(
       // the compositor returns an all-black PNG, so the artifact is inspected
       // by pixel content after the run rather than treating a successful call
       // as proof of a valid screenshot.
-      const captureMode = ({
-        1: 'cdp-fromSurface-false',
-        2: 'cdp-default-options',
-        3: 'cdp-forced-repaint-fromSurface-true',
-        4: 'playwright-page-screenshot',
-      } as Record<number, string>)[number] ?? 'cdp-fromSurface-true'
+      const captureModes = [
+        'cdp-fromSurface-false',
+        'cdp-default-options',
+        'cdp-forced-repaint-fromSurface-true',
+        'playwright-page-screenshot',
+      ]
+      // Step numbers in MAN-N scenarios are not guaranteed to be 1..4.
+      // Rotate through the four capture modes explicitly so every run tests them.
+      const captureMode = captureModes[(Math.abs(number) - 1) % captureModes.length]
       let screenshot: Buffer
       let captureError: string | null = null
       try {
