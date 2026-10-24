@@ -35,11 +35,11 @@ test('итоговая таблица показывает отклонения 
     'Перерыв длительностью 90 минут сохранён.',
     async () => {
       await page.locator(startBreak).click()
-      await confirm.first().click()
+      await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Перерыв')
       await advanceClock(page, 90 * 60)
       await page.locator(endOrder).first().click()
-      await confirm.first().click()
+      await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_state-label')).toHaveText('Работа')
       await expect(page.locator('.breaks_item')).toHaveCount(1)
     },
@@ -53,7 +53,7 @@ test('итоговая таблица показывает отклонения 
     async () => {
       await advanceClock(page, 60 * 60)
       await page.locator(endOrder).first().click()
-      await confirm.first().click()
+      await page.locator(confirm).first().click()
       await expect(page.locator('.breaks_summary')).toBeVisible()
 
       const rows = page.locator('.breaks_summary tbody tr')
