@@ -25,12 +25,12 @@ test('нельзя начать второй перерыв, пока первы
   // не должен создавать второй интервал в фактическом выполнении.
   await expect(startBreak).toHaveCount(0)
 
-  const orders = await mock.orders()
-  expect(orders).toBeTruthy()
-  const order = orders[DEMO_ORDER_ID]
+  const snapshot = await mock.orders()
+  expect(snapshot.status).toBe('ok')
+  const order = snapshot.data.find((item: any) => String(item.b_id) === DEMO_ORDER_ID)
   expect(order).toBeTruthy()
 
   const execution = order.drivers?.[0]?.c_options?.c_execution
   expect(execution?.actual?.breaks).toHaveLength(1)
-  expect(execution.actual.breaks[0].ended).toBeFalsy()
+  expect(execution.actual.breaks[0].ended).toBeNull()
 })
