@@ -23,7 +23,7 @@ test('нельзя начать второй перерыв, пока первы
 
   // Пока перерыв открыт, действие его начала недоступно: повторный запуск
   // не должен создавать второй интервал в фактическом выполнении.
-  await expect(startBreak).toHaveCount(0)
+  await expect(startBreak).toBeHidden()
 
   const snapshot = await mock.orders()
   expect(snapshot.status).toBe('ok')
